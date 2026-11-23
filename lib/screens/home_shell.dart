@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_reminder_service.dart';
 import '../services/telephony_service.dart';
+import '../services/update_service.dart';
 import 'dashboard_screen.dart';
 import 'leads_screen.dart';
 import 'call_history_screen.dart';
@@ -26,6 +27,18 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     _currentUser = widget.user;
     _startAgendaReminders();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForUpdates();
+    });
+  }
+
+  void _checkForUpdates() async {
+    try {
+      final info = await UpdateService().checkForUpdate();
+      if (info != null && mounted) {
+        UpdateService().showUpdateDialog(context, info);
+      }
+    } catch (_) {}
   }
 
   @override

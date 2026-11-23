@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/theme_service.dart';
+import '../services/update_service.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -26,6 +28,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   late UserProfile _currentUser;
   bool _isLoading = false;
+  String _appVersion = 'v1.1.0 (Build 2)';
+  bool _isCheckingUpdate = false;
 
   // Accessibility Preferences
   double _fontScale = 1.0;
@@ -38,6 +42,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _currentUser = widget.user;
     _loadAccessibilityPrefs();
     _fetchLatestProfile();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${info.version} (Build ${info.buildNumber})';
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadAccessibilityPrefs() async {
@@ -399,9 +415,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           // 6. Account Security Actions (Password reset & Privacy Shield)
           _buildSecurityCard(borderColor, isDark),
+          const SizedBox(height: 14),
+
+          // 7. App Version & In-App Auto-Update Card
+          _buildAppUpdateCard(borderColor, isDark),
           const SizedBox(height: 20),
 
-          // 7. Sign Out Button
+          // 8. Sign Out Button
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -917,6 +937,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 8),
           const Text(
             'Hardware AES-256 KeyStore token storage is active. Direct HTTPS communication with Zero 3rd-Party Tracking.',
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 11, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// App Version & In-App Auto-Update Card
+  Widget _buildAppUpdateCard(Color borderColor, bool isDark) {
+    final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.system_update_rounded, color: Color(0xFF10B981), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'App Auto-Update',
+                      style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _appVersion,
+                      style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 36,
+                child: ElevatedButton.icon(
+                  onPressed: _isCheckingUpdate
+                      ? null
+                      : () async {
+                          setState(() => _isCheckingUpdate = true);
+                          await UpdateService().checkAndShowPrompt(context, isManual: true);
+                          if (mounted) setState(() => _isCheckingUpdate = false);
+                        },
+                  icon: _isCheckingUpdate
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.refresh_rounded, size: 16),
+                  label: Text(_isCheckingUpdate ? 'Checking...' : 'Check Update', style: const TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'New releases and features are automatically verified and updated in-app from crm.textorasms.com without manual APK downloads.',
             style: TextStyle(color: Color(0xFF64748B), fontSize: 11, height: 1.4),
           ),
         ],

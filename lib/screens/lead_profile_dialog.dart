@@ -817,7 +817,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 final disp = log['disposition'] ?? 'Unknown';
                 final dur = log['durationSeconds'] ?? 0;
                 final rawTime = log['callTimestamp']?.toString() ?? '';
-                final remark = log['remark']?.toString()?.trim();
+                final remark = log['remark']?.toString().trim();
                 final isConnected = disp.toString().toLowerCase().contains('connect');
 
                 String displayTime = rawTime;
@@ -886,7 +886,6 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                       style: TextStyle(color: subColor, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ],
-                );
                 );
               },
             ),
