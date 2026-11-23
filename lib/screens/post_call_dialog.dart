@@ -21,6 +21,7 @@ class PostCallDialog extends StatefulWidget {
 
 class _PostCallDialogState extends State<PostCallDialog> {
   late String _disposition;
+  String _serviceOwner = 'our'; // 'our' or 'other'
   final _remarkController = TextEditingController();
   bool _isSaving = false;
 
@@ -28,6 +29,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
     'Connected',
     'Callback',
     'Demo Scheduled',
+    'Demo Done',
     'RNR',
     'Not Interested',
     'Already Using',
@@ -37,7 +39,16 @@ class _PostCallDialogState extends State<PostCallDialog> {
   @override
   void initState() {
     super.initState();
-    _disposition = widget.call.disposition;
+    final d = widget.call.disposition;
+    if (d.contains('Other') || d.contains('Competitor') || d.contains('Purchased')) {
+      _disposition = 'Already Using';
+      _serviceOwner = 'other';
+    } else if (d.contains('Our Service')) {
+      _disposition = 'Already Using';
+      _serviceOwner = 'our';
+    } else {
+      _disposition = d;
+    }
   }
 
   String _formatDuration(int seconds) {
@@ -52,11 +63,18 @@ class _PostCallDialogState extends State<PostCallDialog> {
     setState(() => _isSaving = true);
     final remark = _remarkController.text.trim();
 
+    String finalDisposition = _disposition;
+    if (_disposition == 'Already Using') {
+      finalDisposition = _serviceOwner == 'other'
+          ? 'Already Purchased or Using Other Company Service'
+          : 'Already Using Our Service';
+    }
+
     final api = ApiService();
     // 1. Dispose in CRM — this updates lead status, tasks, pipeline, and records the call log as apk_manual
     await api.disposeLead(
       leadId: widget.lead.id,
-      disposition: _disposition,
+      disposition: finalDisposition,
       durationSeconds: widget.call.durationSeconds,
       remark: remark.isNotEmpty ? remark : null,
     );
@@ -162,10 +180,23 @@ class _PostCallDialogState extends State<PostCallDialog> {
             runSpacing: 8,
             children: _dispositions.map((d) {
               final isSelected = _disposition == d;
+              String labelText = d;
+              if (d == 'Already Using' && isSelected) {
+                labelText = _serviceOwner == 'other'
+                    ? 'Already Using (Other)'
+                    : 'Already Using (Our)';
+              }
+              final chipSelectedColor = (d == 'Already Using' && _serviceOwner == 'other')
+                  ? const Color(0xFFEA580C)
+                  : const Color(0xFF059669);
+              final chipBorderColor = (d == 'Already Using' && _serviceOwner == 'other')
+                  ? const Color(0xFFF97316)
+                  : const Color(0xFF10B981);
+
               return ChoiceChip(
-                label: Text(d),
+                label: Text(labelText),
                 selected: isSelected,
-                selectedColor: const Color(0xFF059669),
+                selectedColor: chipSelectedColor,
                 backgroundColor: chipBg,
                 labelStyle: TextStyle(
                   color: isSelected
@@ -180,7 +211,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
                   borderRadius: BorderRadius.circular(10),
                   side: BorderSide(
                     color: isSelected
-                        ? const Color(0xFF10B981)
+                        ? chipBorderColor
                         : isDark
                             ? const Color(0xFF334155).withValues(alpha: 0.6)
                             : const Color(0xFFCBD5E1),
@@ -190,6 +221,137 @@ class _PostCallDialogState extends State<PostCallDialog> {
               );
             }).toList(),
           ),
+
+          // Sub-options: Using Whose Service? (Our Service vs Other Company)
+          if (_disposition == 'Already Using') ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _serviceOwner == 'our'
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF97316),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.business,
+                        size: 15,
+                        color: _serviceOwner == 'our'
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFFF97316),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Using Whose Service?',
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _serviceOwner = 'our'),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: _serviceOwner == 'our'
+                                  ? const Color(0xFF059669)
+                                  : (isDark ? const Color(0xFF0F172A) : Colors.white),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _serviceOwner == 'our'
+                                    ? const Color(0xFF059669)
+                                    : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 14,
+                                  color: _serviceOwner == 'our' ? Colors.white : Colors.grey,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Our Service',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: _serviceOwner == 'our'
+                                        ? Colors.white
+                                        : titleColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _serviceOwner = 'other'),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: _serviceOwner == 'other'
+                                  ? const Color(0xFFEA580C)
+                                  : (isDark ? const Color(0xFF0F172A) : Colors.white),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _serviceOwner == 'other'
+                                    ? const Color(0xFFEA580C)
+                                    : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.store,
+                                  size: 14,
+                                  color: _serviceOwner == 'other' ? Colors.white : Colors.grey,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Other Company',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: _serviceOwner == 'other'
+                                        ? Colors.white
+                                        : titleColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           // Remarks Input
