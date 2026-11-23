@@ -265,21 +265,31 @@ class ApiService {
     required String disposition,
     required int durationSeconds,
     String? remark,
+    String? callbackDatetime,
+    String? demoDatetime,
+    String? decisionMakerName,
+    String? meetingLink,
   }) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/dispose');
     final headers = await _headers();
 
+    final payload = <String, dynamic>{
+      'disposition': disposition,
+      'durationSeconds': durationSeconds,
+      'remark': remark,
+      'logSource': 'apk_manual',
+    };
+    if (callbackDatetime != null) payload['callbackDatetime'] = callbackDatetime;
+    if (demoDatetime != null) payload['demoDatetime'] = demoDatetime;
+    if (decisionMakerName != null) payload['decisionMakerName'] = decisionMakerName;
+    if (meetingLink != null) payload['meetingLink'] = meetingLink;
+
     try {
       var res = await http.patch(
         url,
         headers: headers,
-        body: jsonEncode({
-          'disposition': disposition,
-          'durationSeconds': durationSeconds,
-          'remark': remark,
-          'logSource': 'apk_manual',
-        }),
+        body: jsonEncode(payload),
       );
 
       if (res.statusCode == 401) {
@@ -289,12 +299,7 @@ class ApiService {
           res = await http.patch(
             url,
             headers: newHeaders,
-            body: jsonEncode({
-              'disposition': disposition,
-              'durationSeconds': durationSeconds,
-              'remark': remark,
-              'logSource': 'apk_manual',
-            }),
+            body: jsonEncode(payload),
           );
         }
       }

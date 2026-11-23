@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/lead_item.dart';
+import '../models/user_profile.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 
 class LeadProfileDialog extends StatefulWidget {
   final LeadItem lead;
+  final UserProfile? user;
   final Function(LeadItem updatedLead)? onLeadUpdated;
 
   const LeadProfileDialog({
     super.key,
     required this.lead,
+    this.user,
     this.onLeadUpdated,
   });
 
@@ -235,9 +239,15 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
   }
 
   Future<void> _openWhatsApp() async {
-    final name = _currentLead.contactName ?? 'there';
-    final pitch =
-        'Hello $name! This is from Textora Technologies. Are you looking to boost customer engagement with our official WhatsApp API & Messaging suite?';
+    UserProfile? currentUser = widget.user;
+    currentUser ??= await StorageService().getUserProfile();
+
+    final pitch = TelephonyService.buildWAPitch(
+      repName: currentUser?.fullName,
+      repEmail: currentUser?.email,
+      repPhone: currentUser?.phoneNumber,
+      contactName: _currentLead.contactName,
+    );
     await _telephony.openWhatsApp(rawPhone: _currentLead.phoneNumber, message: pitch);
   }
 

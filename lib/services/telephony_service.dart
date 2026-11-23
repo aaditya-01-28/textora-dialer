@@ -114,6 +114,45 @@ class TelephonyService {
     } catch (_) {}
   }
 
+  /// Build Dynamic WhatsApp Pitch matching official company template
+  static String buildWAPitch({
+    String? repName,
+    String? repEmail,
+    String? repPhone,
+    String? contactName,
+  }) {
+    final name = (repName != null && repName.trim().isNotEmpty) ? repName.trim() : 'Aaditya';
+    final email = (repEmail != null && repEmail.trim().isNotEmpty) ? repEmail.trim() : 'aaditya@textorasms.com';
+    var phone = (repPhone != null && repPhone.trim().isNotEmpty) ? repPhone.trim() : '9902101007';
+    phone = phone.replaceAll(RegExp(r'\D'), '');
+    if (phone.length > 10) phone = phone.substring(phone.length - 10);
+    if (phone.isEmpty) phone = '9902101007';
+
+    final greetingTarget = (contactName != null && contactName.trim().isNotEmpty)
+        ? contactName.trim()
+        : 'Sir';
+
+    return 'Hello $greetingTarget 👋\n'
+        'This is $name from Textora Technologies Pvt Ltd.\n\n'
+        'Looking to grow your business faster and reach more customers instantly? 🚀\n'
+        'We offer smart messaging solutions to boost sales, engagement, and brand visibility 📈\n\n'
+        '✨ Our Services:\n'
+        '📲 Business WhatsApp API – Official & automated messaging\n'
+        '💬 Virtual WhatsApp – Bulk & personalised campaigns\n'
+        '📩 RCS Messaging – Rich, interactive messages\n'
+        '🔐 Transactional SMS – OTPs, alerts & notifications\n'
+        '📢 Promotional SMS – Offers, campaigns & branding\n'
+        '📞 Voice SMS – Automated voice calls at scale\n'
+        '🌐Website development: Build Premium Websites That Grow Your Business\n\n'
+        '📢 Reach customers instantly | Improve response rate | Increase conversions\n\n'
+        '📞 For details & free demo:\n'
+        '$name\n'
+        '📧 $email\n'
+        'https://textorasms.com\n'
+        '📱 $phone\n\n'
+        'Reply YES to get started 👍';
+  }
+
   /// Launch WhatsApp with Company Pitch
   Future<bool> openWhatsApp({
     required String rawPhone,

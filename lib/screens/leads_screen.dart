@@ -169,6 +169,8 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
+        isDismissible: false,
+        enableDrag: false,
         backgroundColor: Colors.transparent,
         builder: (_) => PostCallDialog(
           lead: lead,
@@ -220,8 +222,12 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openWhatsApp(LeadItem lead) async {
-    const pitch =
-        'Hello! This is from Textora Technologies. Are you interested in boosting your business communications with our official WhatsApp API and Messaging tools?';
+    final pitch = TelephonyService.buildWAPitch(
+      repName: widget.user.fullName,
+      repEmail: widget.user.email,
+      repPhone: widget.user.phoneNumber,
+      contactName: lead.contactName,
+    );
     await _telephony.openWhatsApp(rawPhone: lead.phoneNumber, message: pitch);
   }
 
@@ -538,6 +544,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
       backgroundColor: Colors.transparent,
       builder: (_) => LeadProfileDialog(
         lead: lead,
+        user: widget.user,
         onLeadUpdated: (updated) {
           setState(() {
             final idx = _leads.indexWhere((l) => l.id == updated.id);
