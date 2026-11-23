@@ -7,6 +7,7 @@ class CallSyncItem {
   final String callTimestamp;
   final String? remark;
   final String? recordingUrl;
+  final String logSource;
   bool isSynced;
 
   CallSyncItem({
@@ -18,6 +19,7 @@ class CallSyncItem {
     required this.callTimestamp,
     this.remark,
     this.recordingUrl,
+    this.logSource = 'apk_manual',
     this.isSynced = false,
   });
 
@@ -31,6 +33,7 @@ class CallSyncItem {
       callTimestamp: json['callTimestamp'] ?? DateTime.now().toIso8601String(),
       remark: json['remark'],
       recordingUrl: json['recordingUrl'] ?? json['recording_url'],
+      logSource: json['logSource'] ?? 'apk_manual',
       isSynced: json['isSynced'] ?? false,
     );
   }
@@ -45,6 +48,7 @@ class CallSyncItem {
       'callTimestamp': callTimestamp,
       'remark': remark,
       'recordingUrl': recordingUrl,
+      'logSource': logSource,
       'isSynced': isSynced,
     };
   }

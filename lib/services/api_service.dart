@@ -44,9 +44,13 @@ class ApiService {
     final data = jsonDecode(res.body);
     final user = UserProfile.fromJson(data['user']);
     final token = data['accessToken'] ?? '';
+    final refreshToken = data['refreshToken'] ?? '';
 
     if (token.isNotEmpty) {
       await _storage.saveToken(token);
+      if (refreshToken.isNotEmpty) {
+        await _storage.saveRefreshToken(refreshToken);
+      }
       await _storage.saveUserProfile(user);
     } else {
       throw Exception('Server did not return a valid session token.');
@@ -55,19 +59,58 @@ class ApiService {
     return user;
   }
 
+  /// Silent Token Refresh to Prevent Repeated Disconnects in Mobile APK
+  Future<bool> refreshToken() async {
+    final refresh = await _storage.getRefreshToken();
+    if (refresh == null || refresh.isEmpty) return false;
+
+    final baseUrl = await _storage.getBaseUrl();
+    final url = Uri.parse('$baseUrl/api/auth/refresh');
+
+    try {
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refresh}),
+      );
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final token = data['accessToken'] ?? '';
+        final newRefresh = data['refreshToken'] ?? '';
+        if (token.isNotEmpty) {
+          await _storage.saveToken(token);
+          if (newRefresh.isNotEmpty) {
+            await _storage.saveRefreshToken(newRefresh);
+          }
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
   /// Fetch Assigned Leads for the Logged-In Sales Rep
-  Future<List<LeadItem>> getLeads({int page = 1, String? search}) async {
+  Future<List<LeadItem>> getLeads({int page = 1, String? search, String? status}) async {
     final baseUrl = await _storage.getBaseUrl();
     final queryParams = <String, String>{
       'page': page.toString(),
-      'limit': '50',
+      'limit': '500',
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (status != null && status != 'all') 'status': status,
     };
 
     final url = Uri.parse('$baseUrl/api/leads').replace(queryParameters: queryParams);
     final headers = await _headers();
 
-    final res = await http.get(url, headers: headers);
+    var res = await http.get(url, headers: headers);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        final newHeaders = await _headers();
+        res = await http.get(url, headers: newHeaders);
+      }
+    }
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -86,7 +129,14 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/leads?queue=true');
     final headers = await _headers();
 
-    final res = await http.get(url, headers: headers);
+    var res = await http.get(url, headers: headers);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        final newHeaders = await _headers();
+        res = await http.get(url, headers: newHeaders);
+      }
+    }
     if (res.statusCode != 200) return null;
 
     final data = jsonDecode(res.body);
@@ -110,14 +160,27 @@ class ApiService {
       'callTimestamp': item.callTimestamp,
       if (item.remark != null) 'remark': item.remark,
       if (item.recordingUrl != null) 'recordingUrl': item.recordingUrl,
+      'logSource': item.logSource,
     };
 
     try {
-      final res = await http.post(
+      var res = await http.post(
         url,
         headers: headers,
         body: jsonEncode(payload),
       );
+
+      if (res.statusCode == 401) {
+        final refreshed = await refreshToken();
+        if (refreshed) {
+          final newHeaders = await _headers();
+          res = await http.post(
+            url,
+            headers: newHeaders,
+            body: jsonEncode(payload),
+          );
+        }
+      }
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         await _storage.updateCallRecordSyncStatus(item.id, true);
@@ -208,15 +271,34 @@ class ApiService {
     final headers = await _headers();
 
     try {
-      final res = await http.patch(
+      var res = await http.patch(
         url,
         headers: headers,
         body: jsonEncode({
           'disposition': disposition,
           'durationSeconds': durationSeconds,
           'remark': remark,
+          'logSource': 'apk_manual',
         }),
       );
+
+      if (res.statusCode == 401) {
+        final refreshed = await refreshToken();
+        if (refreshed) {
+          final newHeaders = await _headers();
+          res = await http.patch(
+            url,
+            headers: newHeaders,
+            body: jsonEncode({
+              'disposition': disposition,
+              'durationSeconds': durationSeconds,
+              'remark': remark,
+              'logSource': 'apk_manual',
+            }),
+          );
+        }
+      }
+
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -238,12 +320,30 @@ class ApiService {
   }
 
   /// Fetch Real-Time Dashboard Statistics
-  Future<DashboardStats> getDashboardStats({String period = 'today'}) async {
+  Future<DashboardStats> getDashboardStats({
+    String period = 'today',
+    String? dateFrom,
+    String? dateTo,
+    String? userId,
+  }) async {
     final baseUrl = await _storage.getBaseUrl();
-    final url = Uri.parse('$baseUrl/api/dashboard/stats?period=$period');
+    final queryParams = <String, String>{
+      'period': period,
+      if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+      if (userId != null && userId.isNotEmpty) 'userId': userId,
+    };
+    final url = Uri.parse('$baseUrl/api/dashboard/stats').replace(queryParameters: queryParams);
     final headers = await _headers();
 
-    final res = await http.get(url, headers: headers);
+    var res = await http.get(url, headers: headers);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        final newHeaders = await _headers();
+        res = await http.get(url, headers: newHeaders);
+      }
+    }
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -252,8 +352,23 @@ class ApiService {
     }
 
     final data = jsonDecode(res.body);
-    final statsJson = data['stats'] as Map<String, dynamic>? ?? {};
-    return DashboardStats.fromJson(statsJson);
+    final statsJson = (data['metrics'] ?? data['stats']) as Map<String, dynamic>? ?? {};
+
+    final members = <DashboardTeamMember>[];
+    if (data['teamMembers'] is List) {
+      for (var m in (data['teamMembers'] as List)) {
+        if (m is Map<String, dynamic>) {
+          members.add(DashboardTeamMember.fromJson(m));
+        }
+      }
+    }
+
+    return DashboardStats.fromJson(
+      statsJson,
+      teamMembers: members,
+      dateFrom: data['dateFrom']?.toString(),
+      dateTo: data['dateTo']?.toString(),
+    );
   }
 
   /// Fetch Detailed User Profile with Hierarchy & Counts

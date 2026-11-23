@@ -58,15 +58,30 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final pendingCount = _calls.where((c) => !c.isSynced).length;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scaffoldBg = isDark ? const Color(0xFF090D16) : const Color(0xFFF8FAFC);
+    final appBarBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final remarkColor = isDark ? const Color(0xFF64748B) : const Color(0xFF64748B);
+    final borderColor = isDark ? const Color(0xFF334155).withValues(alpha: 0.4) : const Color(0xFFE2E8F0);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF090D16),
+      backgroundColor: scaffoldBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: appBarBg,
         elevation: 0,
-        title: const Text(
+        leading: Padding(
+          padding: const EdgeInsets.all(11.0),
+          child: Image.asset(
+            'assets/images/icon.png',
+            fit: BoxFit.contain,
+          ),
+        ),
+        title: Text(
           'Mobile Call Logs & Sync',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: titleColor),
         ),
         actions: [
           if (pendingCount > 0)
@@ -76,7 +91,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                   ? const SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
                     )
                   : const Icon(Icons.sync, size: 16, color: Color(0xFF10B981)),
               label: Text(
@@ -86,7 +101,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
             )
           else
             IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white70),
+              icon: Icon(Icons.refresh, color: isDark ? Colors.white70 : const Color(0xFF475569)),
               onPressed: _loadHistory,
             ),
         ],
@@ -94,23 +109,23 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
           : _calls.isEmpty
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.history_toggle_off, color: Color(0xFF64748B), size: 48),
-                        SizedBox(height: 12),
+                        Icon(Icons.history_toggle_off, color: subColor, size: 48),
+                        const SizedBox(height: 12),
                         Text(
                           'No calls logged yet on this device.',
-                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: titleColor, fontSize: 14, fontWeight: FontWeight.w600),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
                           'Calls dialed from the Leads tab will automatically appear here with exact carrier duration.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                          style: TextStyle(color: subColor, fontSize: 12),
                         ),
                       ],
                     ),
@@ -125,9 +140,16 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                     return Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: cardBg,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF334155).withValues(alpha: 0.4)),
+                        border: Border.all(color: borderColor),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
@@ -152,8 +174,8 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                               children: [
                                 Text(
                                   call.phoneNumber,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: titleColor,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                     fontFamily: 'monospace',
@@ -162,13 +184,13 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                 const SizedBox(height: 2),
                                 Text(
                                   '${call.disposition} • Talk Time: ${_formatDuration(call.durationSeconds)}',
-                                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                  style: TextStyle(color: subColor, fontSize: 12),
                                 ),
                                 if (call.remark != null && call.remark!.isNotEmpty) ...[
                                   const SizedBox(height: 4),
                                   Text(
                                     call.remark!,
-                                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
+                                    style: TextStyle(color: remarkColor, fontSize: 11, fontStyle: FontStyle.italic),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -201,7 +223,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                 call.callTimestamp.length > 16
                                     ? call.callTimestamp.substring(11, 16)
                                     : '',
-                                style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                                style: TextStyle(color: subColor, fontSize: 10),
                               ),
                             ],
                           ),

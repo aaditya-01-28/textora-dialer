@@ -189,6 +189,7 @@ class TelephonyService {
           callTimestamp: timestampIso,
           remark: 'Captured from SIM dialer',
           recordingUrl: recordingUrl,
+          logSource: 'dialer_connected',
         );
 
         // Store locally

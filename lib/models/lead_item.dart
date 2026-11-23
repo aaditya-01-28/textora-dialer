@@ -14,6 +14,7 @@ class LeadItem {
   final String? createdAt;
   final String? updatedAt;
   final String? assignedRepName;
+  final int callLogsCount;
 
   LeadItem({
     required this.id,
@@ -26,6 +27,7 @@ class LeadItem {
     required this.source,
     required this.status,
     required this.rnrCount,
+    this.callLogsCount = 0,
     this.preferredLanguage,
     this.address,
     this.createdAt,
@@ -48,6 +50,11 @@ class LeadItem {
       source: json['source']?.toString() ?? 'Direct',
       status: json['status']?.toString() ?? 'new',
       rnrCount: (json['rnrCount'] is num) ? (json['rnrCount'] as num).toInt() : 0,
+      callLogsCount: (json['callLogsCount'] is num)
+          ? (json['callLogsCount'] as num).toInt()
+          : (json['_count'] is Map && json['_count']['callLogs'] is num)
+              ? (json['_count']['callLogs'] as num).toInt()
+              : 0,
       preferredLanguage: json['preferredLanguage']?.toString() ?? customMeta?['preferredLanguage']?.toString(),
       address: json['address']?.toString() ?? customMeta?['address']?.toString(),
       createdAt: json['createdAt']?.toString(),
@@ -86,6 +93,7 @@ class LeadItem {
     String? source,
     String? status,
     int? rnrCount,
+    int? callLogsCount,
     String? preferredLanguage,
     String? address,
     String? createdAt,
@@ -103,6 +111,7 @@ class LeadItem {
       source: source ?? this.source,
       status: status ?? this.status,
       rnrCount: rnrCount ?? this.rnrCount,
+      callLogsCount: callLogsCount ?? this.callLogsCount,
       preferredLanguage: preferredLanguage ?? this.preferredLanguage,
       address: address ?? this.address,
       createdAt: createdAt ?? this.createdAt,

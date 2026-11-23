@@ -17,6 +17,7 @@ class StorageService {
   );
 
   static const String _keyToken = 'auth_token';
+  static const String _keyRefreshToken = 'auth_refresh_token';
   static const String _keyUser = 'user_profile';
   static const String _keyBaseUrl = 'crm_base_url';
   static const String _keyCallQueue = 'offline_call_queue';
@@ -28,6 +29,14 @@ class StorageService {
 
   Future<String?> getToken() async {
     return await _secureStorage.read(key: _keyToken);
+  }
+
+  Future<void> saveRefreshToken(String token) async {
+    await _secureStorage.write(key: _keyRefreshToken, value: token);
+  }
+
+  Future<String?> getRefreshToken() async {
+    return await _secureStorage.read(key: _keyRefreshToken);
   }
 
   Future<void> saveUserProfile(UserProfile user) async {
@@ -61,6 +70,7 @@ class StorageService {
 
   Future<void> clearAuth() async {
     await _secureStorage.delete(key: _keyToken);
+    await _secureStorage.delete(key: _keyRefreshToken);
     await _secureStorage.delete(key: _keyUser);
   }
 

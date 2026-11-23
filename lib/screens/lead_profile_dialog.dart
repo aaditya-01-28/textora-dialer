@@ -42,13 +42,21 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
 
   static const List<String> _statusOptions = [
     'new',
+    'callback',
+    'demo_scheduled',
+    'demo_done',
+    'deal_created',
+    'won',
+    'lost',
+    'rnr',
+    'not_interested',
+    'already_using',
+    'already_purchased',
+    'future_requirement',
     'contacted',
     'qualified',
     'proposal_sent',
     'negotiation',
-    'won',
-    'lost',
-    'rnr',
     'junk',
   ];
 
@@ -186,19 +194,24 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             _isEditing = false;
             _isSaving = false;
           });
-
           widget.onLeadUpdated?.call(updated);
-
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: Color(0xFF059669),
               content: Text('Lead profile updated successfully!'),
-              duration: Duration(seconds: 2),
             ),
           );
         }
       } else {
-        throw Exception('Server rejected the update.');
+        if (mounted) {
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.redAccent,
+              content: Text('Failed to update lead. Please try again.'),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -206,7 +219,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.redAccent,
-            content: Text(e.toString().replaceAll('Exception:', '').trim()),
+            content: Text('Error: ${e.toString().replaceAll('Exception:', '').trim()}'),
           ),
         );
       }
@@ -223,16 +236,33 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
 
   Future<void> _openWhatsApp() async {
     final name = _currentLead.contactName ?? 'there';
-    final pitch = 'Hello $name! This is from Textora Technologies. Are you looking to boost customer engagement with our official WhatsApp API & Messaging suite?';
+    final pitch =
+        'Hello $name! This is from Textora Technologies. Are you looking to boost customer engagement with our official WhatsApp API & Messaging suite?';
     await _telephony.openWhatsApp(rawPhone: _currentLead.phoneNumber, message: pitch);
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final modalBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final borderColor = isDark ? const Color(0xFF334155).withValues(alpha: 0.5) : const Color(0xFFE2E8F0);
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final dragHandleColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final dividerColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: modalBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -252,19 +282,19 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF334155),
+                      color: dragHandleColor,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 22),
+                    icon: Icon(Icons.close_rounded, color: subColor, size: 22),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
 
               // Header: Lead Title, Status, and Call Action Row
-              _buildHeader(),
+              _buildHeader(isDark, titleColor, subColor),
               const SizedBox(height: 16),
 
               // Quick Actions: Call SIM & WhatsApp
@@ -277,8 +307,8 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 children: [
                   Text(
                     _isEditing ? 'Editing Lead Profile' : 'Lead Profile Dossier',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: titleColor,
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
                     ),
@@ -304,11 +334,14 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               const SizedBox(height: 10),
 
               // Body: Either Edit Form or Compact Dossier View
-              if (_isEditing) _buildEditForm() else _buildDossierView(),
+              if (_isEditing)
+                _buildEditForm(isDark, cardBg, borderColor, titleColor, subColor)
+              else
+                _buildDossierView(cardBg, borderColor, titleColor, subColor, dividerColor),
               const SizedBox(height: 20),
 
               // Call History with this Lead
-              _buildCallHistorySection(),
+              _buildCallHistorySection(isDark, cardBg, borderColor, titleColor, subColor, dividerColor),
               const SizedBox(height: 20),
             ],
           ),
@@ -317,16 +350,16 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isDark, Color titleColor, Color subColor) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           radius: 26,
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFE6F4EA),
           child: Text(
             _currentLead.displayTitle.isNotEmpty ? _currentLead.displayTitle[0].toUpperCase() : '#',
-            style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 20),
+            style: const TextStyle(color: Color(0xFF059669), fontWeight: FontWeight.bold, fontSize: 20),
           ),
         ),
         const SizedBox(width: 14),
@@ -336,8 +369,8 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             children: [
               Text(
                 _currentLead.displayTitle,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: titleColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -347,12 +380,12 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               const SizedBox(height: 3),
               Row(
                 children: [
-                  const Icon(Icons.phone_outlined, color: Color(0xFF94A3B8), size: 14),
+                  Icon(Icons.phone_outlined, color: subColor, size: 14),
                   const SizedBox(width: 4),
                   Text(
                     '+91 ${_currentLead.phoneNumber}',
-                    style: const TextStyle(
-                      color: Color(0xFF94A3B8),
+                    style: TextStyle(
+                      color: subColor,
                       fontSize: 13,
                       fontFamily: 'monospace',
                     ),
@@ -365,12 +398,30 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                         const SnackBar(content: Text('Phone number copied to clipboard!'), duration: Duration(seconds: 1)),
                       );
                     },
-                    child: const Icon(Icons.copy_rounded, color: Color(0xFF64748B), size: 14),
+                    child: Icon(Icons.copy_rounded, color: subColor, size: 14),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
-              _buildStatusPill(_currentLead.status),
+              Row(
+                children: [
+                  _buildStatusPill(_currentLead.status),
+                  if (_currentLead.rnrCount > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'RNR ×${_currentLead.rnrCount}',
+                        style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -382,32 +433,31 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     Color bg = const Color(0xFF1E293B);
     Color text = Colors.white70;
 
-    switch (status.toLowerCase()) {
-      case 'new':
-        bg = const Color(0xFF38BDF8).withValues(alpha: 0.15);
-        text = const Color(0xFF38BDF8);
-        break;
-      case 'contacted':
-        bg = const Color(0xFF06B6D4).withValues(alpha: 0.15);
-        text = const Color(0xFF06B6D4);
-        break;
-      case 'qualified':
-      case 'won':
-        bg = const Color(0xFF10B981).withValues(alpha: 0.15);
-        text = const Color(0xFF10B981);
-        break;
-      case 'rnr':
-        bg = Colors.amber.withValues(alpha: 0.15);
-        text = Colors.amber;
-        break;
-      case 'lost':
-      case 'junk':
-        bg = Colors.red.withValues(alpha: 0.15);
-        text = Colors.redAccent;
-        break;
-      default:
-        bg = const Color(0xFF818CF8).withValues(alpha: 0.15);
-        text = const Color(0xFF818CF8);
+    final s = status.toLowerCase();
+    if (s == 'new' || s == 'uncontacted') {
+      bg = const Color(0xFF38BDF8).withValues(alpha: 0.15);
+      text = const Color(0xFF38BDF8);
+    } else if (s.contains('callback')) {
+      bg = const Color(0xFF818CF8).withValues(alpha: 0.15);
+      text = const Color(0xFF818CF8);
+    } else if (s.contains('demo')) {
+      bg = const Color(0xFFA855F7).withValues(alpha: 0.15);
+      text = const Color(0xFFA855F7);
+    } else if (s.contains('deal')) {
+      bg = const Color(0xFFF59E0B).withValues(alpha: 0.15);
+      text = const Color(0xFFF59E0B);
+    } else if (s == 'won' || s == 'converted') {
+      bg = const Color(0xFF10B981).withValues(alpha: 0.15);
+      text = const Color(0xFF10B981);
+    } else if (s == 'rnr') {
+      bg = Colors.amber.withValues(alpha: 0.15);
+      text = Colors.amber;
+    } else if (s == 'lost' || s == 'junk') {
+      bg = Colors.red.withValues(alpha: 0.15);
+      text = Colors.redAccent;
+    } else {
+      bg = const Color(0xFF64748B).withValues(alpha: 0.15);
+      text = const Color(0xFF64748B);
     }
 
     return Container(
@@ -418,7 +468,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
         border: Border.all(color: text.withValues(alpha: 0.4), width: 0.8),
       ),
       child: Text(
-        status.toUpperCase(),
+        status.replaceAll('_', ' ').toUpperCase(),
         style: TextStyle(color: text, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
       ),
     );
@@ -428,7 +478,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     return Row(
       children: [
         Expanded(
-          flex: 3,
+          flex: 4,
           child: ElevatedButton.icon(
             onPressed: _callLead,
             icon: const Icon(Icons.phone_forwarded_rounded, size: 18),
@@ -459,54 +509,60 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     );
   }
 
-  Widget _buildDossierView() {
+  Widget _buildDossierView(
+    Color cardBg,
+    Color borderColor,
+    Color titleColor,
+    Color subColor,
+    Color dividerColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155).withValues(alpha: 0.5)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         children: [
-          _buildInfoRow('Contact Person', _currentLead.contactName ?? 'Not specified'),
-          const Divider(color: Color(0xFF334155), height: 16),
-          _buildInfoRow('Company Name', _currentLead.companyName ?? 'Not specified'),
-          const Divider(color: Color(0xFF334155), height: 16),
-          _buildInfoRow('Industry Vertical', _currentLead.businessVertical ?? 'Unspecified'),
-          const Divider(color: Color(0xFF334155), height: 16),
-          _buildInfoRow('Service Interest', _currentLead.serviceType ?? 'Unspecified'),
-          const Divider(color: Color(0xFF334155), height: 16),
-          _buildInfoRow('Preferred Language', _currentLead.preferredLanguage ?? 'English'),
-          const Divider(color: Color(0xFF334155), height: 16),
-          _buildInfoRow('Website URL', _currentLead.websiteUrl ?? 'None'),
-          const Divider(color: Color(0xFF334155), height: 16),
-          _buildInfoRow('Lead Source', _currentLead.source),
+          _buildInfoRow('Contact Person', _currentLead.contactName ?? 'Not specified', titleColor, subColor),
+          Divider(color: dividerColor, height: 16),
+          _buildInfoRow('Company Name', _currentLead.companyName ?? 'Not specified', titleColor, subColor),
+          Divider(color: dividerColor, height: 16),
+          _buildInfoRow('Industry Vertical', _currentLead.businessVertical ?? 'Unspecified', titleColor, subColor),
+          Divider(color: dividerColor, height: 16),
+          _buildInfoRow('Service Interest', _currentLead.serviceType ?? 'Unspecified', titleColor, subColor),
+          Divider(color: dividerColor, height: 16),
+          _buildInfoRow('Preferred Language', _currentLead.preferredLanguage ?? 'English', titleColor, subColor),
+          Divider(color: dividerColor, height: 16),
+          _buildInfoRow('Website URL', _currentLead.websiteUrl ?? 'None', titleColor, subColor),
+          Divider(color: dividerColor, height: 16),
+          _buildInfoRow('Lead Source', _currentLead.source, titleColor, subColor),
           if (_currentLead.address != null && _currentLead.address!.isNotEmpty) ...[
-            const Divider(color: Color(0xFF334155), height: 16),
-            _buildInfoRow('Address', _currentLead.address!),
+            Divider(color: dividerColor, height: 16),
+            _buildInfoRow('Address', _currentLead.address!, titleColor, subColor),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String value, Color titleColor, Color subColor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+          style: TextStyle(color: subColor, fontSize: 12),
         ),
         const SizedBox(width: 16),
         Flexible(
           child: Text(
             value,
             textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: titleColor,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -516,27 +572,36 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     );
   }
 
-  Widget _buildEditForm() {
+  Widget _buildEditForm(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color titleColor,
+    Color subColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildTextField('Contact Name', _nameController, 'e.g. Ramesh Kumar'),
+          _buildTextField('Contact Name', _nameController, 'e.g. Ramesh Kumar', isDark, titleColor, subColor),
           const SizedBox(height: 12),
-          _buildTextField('Company / Organization', _companyController, 'e.g. Acme Logistics Pvt Ltd'),
+          _buildTextField('Company / Organization', _companyController, 'e.g. Acme Logistics Pvt Ltd', isDark, titleColor, subColor),
           const SizedBox(height: 12),
-          _buildTextField('Phone Number', _phoneController, '10 digit number', isPhone: true),
+          _buildTextField('Phone Number', _phoneController, '10 digit number', isDark, titleColor, subColor, isPhone: true),
           const SizedBox(height: 12),
           _buildDropdown(
             label: 'Lead Pipeline Status',
             value: _selectedStatus,
             items: _statusOptions,
+            isDark: isDark,
+            titleColor: titleColor,
+            subColor: subColor,
             onChanged: (val) => setState(() => _selectedStatus = val!),
           ),
           const SizedBox(height: 12),
@@ -544,6 +609,9 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             label: 'Industry Vertical',
             value: _selectedVertical,
             items: _verticalOptions,
+            isDark: isDark,
+            titleColor: titleColor,
+            subColor: subColor,
             onChanged: (val) => setState(() => _selectedVertical = val!),
           ),
           const SizedBox(height: 12),
@@ -551,6 +619,9 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             label: 'Service Interest',
             value: _selectedService,
             items: _serviceOptions,
+            isDark: isDark,
+            titleColor: titleColor,
+            subColor: subColor,
             onChanged: (val) => setState(() => _selectedService = val!),
           ),
           const SizedBox(height: 12),
@@ -558,12 +629,15 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             label: 'Preferred Language',
             value: _selectedLanguage,
             items: _languageOptions,
+            isDark: isDark,
+            titleColor: titleColor,
+            subColor: subColor,
             onChanged: (val) => setState(() => _selectedLanguage = val!),
           ),
           const SizedBox(height: 12),
-          _buildTextField('Website URL', _websiteController, 'https://example.com'),
+          _buildTextField('Website URL', _websiteController, 'https://example.com', isDark, titleColor, subColor),
           const SizedBox(height: 12),
-          _buildTextField('Address / City', _addressController, 'e.g. Mumbai, Maharashtra'),
+          _buildTextField('Address / City', _addressController, 'e.g. Mumbai, Maharashtra', isDark, titleColor, subColor),
           const SizedBox(height: 18),
 
           ElevatedButton(
@@ -587,23 +661,38 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, String hint, {bool isPhone = false}) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller,
+    String hint,
+    bool isDark,
+    Color titleColor,
+    Color subColor, {
+    bool isPhone = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
         const SizedBox(height: 5),
         TextField(
           controller: controller,
           keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          style: TextStyle(color: titleColor, fontSize: 13),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+            hintStyle: TextStyle(color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8), fontSize: 12),
             filled: true,
-            fillColor: const Color(0xFF0F172A),
+            fillColor: isDark ? const Color(0xFF0F172A) : Colors.white,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+            ),
           ),
         ),
       ],
@@ -614,26 +703,30 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     required String label,
     required String value,
     required List<String> items,
+    required bool isDark,
+    required Color titleColor,
+    required Color subColor,
     required ValueChanged<String?> onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
         const SizedBox(height: 5),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
             borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: items.contains(value) ? value : items.first,
               isExpanded: true,
-              dropdownColor: const Color(0xFF1E293B),
-              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF94A3B8)),
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              icon: Icon(Icons.arrow_drop_down, color: subColor),
+              style: TextStyle(color: titleColor, fontSize: 13),
               items: items.map((opt) {
                 return DropdownMenuItem<String>(
                   value: opt,
@@ -648,24 +741,31 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     );
   }
 
-  Widget _buildCallHistorySection() {
+  Widget _buildCallHistorySection(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color titleColor,
+    Color subColor,
+    Color dividerColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155).withValues(alpha: 0.5)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.history_rounded, color: Color(0xFF10B981), size: 18),
-              SizedBox(width: 8),
+              const Icon(Icons.history_rounded, color: Color(0xFF10B981), size: 18),
+              const SizedBox(width: 8),
               Text(
                 'Recent Calls with this Lead',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ],
           ),
@@ -682,12 +782,12 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               ),
             )
           else if (_callLogs.isEmpty)
-            const Center(
+            Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 child: Text(
                   'No previous calls recorded for this lead yet.',
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                  style: TextStyle(color: subColor, fontSize: 12),
                 ),
               ),
             )
@@ -696,7 +796,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _callLogs.length > 5 ? 5 : _callLogs.length,
-              separatorBuilder: (context, index) => const Divider(color: Color(0xFF334155), height: 14),
+              separatorBuilder: (context, index) => Divider(color: dividerColor, height: 14),
               itemBuilder: (context, index) {
                 final log = _callLogs[index];
                 final disp = log['disposition'] ?? 'Unknown';
@@ -720,11 +820,11 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                           children: [
                             Text(
                               disp,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                              style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                             Text(
                               time.length >= 16 ? time.substring(0, 16).replaceAll('T', ' ') : time,
-                              style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                              style: TextStyle(color: subColor, fontSize: 10),
                             ),
                           ],
                         ),
@@ -732,7 +832,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                     ),
                     Text(
                       '${dur}s',
-                      style: const TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(color: subColor, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ],
                 );

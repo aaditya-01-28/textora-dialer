@@ -61,7 +61,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
       remark: remark.isNotEmpty ? remark : null,
     );
 
-    // 2. Also ensure CallLog is synced
+    // 2. Also ensure CallLog is synced as APK manual update
     final updatedCall = CallSyncItem(
       id: widget.call.id,
       leadId: widget.lead.id,
@@ -70,6 +70,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
       disposition: _disposition,
       callTimestamp: widget.call.callTimestamp,
       remark: remark.isNotEmpty ? remark : null,
+      logSource: 'apk_manual',
     );
     await api.syncCallLog(updatedCall);
 
@@ -80,6 +81,14 @@ class _PostCallDialogState extends State<PostCallDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final modalBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final inputBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final inputBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final chipBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+
     return Container(
       padding: EdgeInsets.only(
         left: 20,
@@ -87,24 +96,42 @@ class _PostCallDialogState extends State<PostCallDialog> {
         top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: modalBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Call Completed',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: titleColor,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -112,14 +139,14 @@ class _PostCallDialogState extends State<PostCallDialog> {
                   const SizedBox(height: 2),
                   Text(
                     widget.lead.displayName,
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                    style: TextStyle(color: subColor, fontSize: 13),
                   ),
                 ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF059669).withValues(alpha: 0.2),
+                  color: const Color(0xFF059669).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.4)),
                 ),
@@ -136,9 +163,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
           ),
           const SizedBox(height: 18),
 
-          const Text(
+          Text(
             'Select Call Outcome / Disposition:',
-            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
 
@@ -152,16 +179,24 @@ class _PostCallDialogState extends State<PostCallDialog> {
                 label: Text(d),
                 selected: isSelected,
                 selectedColor: const Color(0xFF059669),
-                backgroundColor: const Color(0xFF1E293B),
+                backgroundColor: chipBg,
                 labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                  color: isSelected
+                      ? Colors.white
+                      : isDark
+                          ? const Color(0xFF94A3B8)
+                          : const Color(0xFF475569),
                   fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                   side: BorderSide(
-                    color: isSelected ? const Color(0xFF10B981) : Colors.transparent,
+                    color: isSelected
+                        ? const Color(0xFF10B981)
+                        : isDark
+                            ? const Color(0xFF334155).withValues(alpha: 0.6)
+                            : const Color(0xFFCBD5E1),
                   ),
                 ),
                 onSelected: (_) => setState(() => _disposition = d),
@@ -173,16 +208,21 @@ class _PostCallDialogState extends State<PostCallDialog> {
           // Remarks Input
           TextField(
             controller: _remarkController,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
+            style: TextStyle(color: titleColor, fontSize: 13),
             maxLines: 2,
             decoration: InputDecoration(
               hintText: 'Discussion notes, price discussed, next action...',
-              hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+              hintStyle: TextStyle(color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8), fontSize: 12),
               filled: true,
-              fillColor: const Color(0xFF1E293B),
+              fillColor: inputBg,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+                borderSide: BorderSide(color: inputBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: inputBorder),
               ),
             ),
           ),

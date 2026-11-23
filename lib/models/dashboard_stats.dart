@@ -1,3 +1,61 @@
+class DealStageStat {
+  final String stage;
+  final int count;
+  final double value;
+
+  DealStageStat({
+    required this.stage,
+    required this.count,
+    required this.value,
+  });
+
+  factory DealStageStat.fromJson(Map<String, dynamic> json) {
+    return DealStageStat(
+      stage: json['stage']?.toString() ?? '',
+      count: _parseInt(json['count']),
+      value: _parseDouble(json['value']),
+    );
+  }
+
+  static int _parseInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
+
+  static double _parseDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+}
+
+class DashboardTeamMember {
+  final String id;
+  final String fullName;
+  final String email;
+  final String role;
+  final String? phoneNumber;
+
+  DashboardTeamMember({
+    required this.id,
+    required this.fullName,
+    required this.email,
+    required this.role,
+    this.phoneNumber,
+  });
+
+  factory DashboardTeamMember.fromJson(Map<String, dynamic> json) {
+    return DashboardTeamMember(
+      id: json['id']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      role: json['role']?.toString() ?? '',
+      phoneNumber: json['phoneNumber']?.toString(),
+    );
+  }
+}
+
 class DashboardStats {
   final int totalCalls;
   final int uniqueDials;
@@ -14,10 +72,15 @@ class DashboardStats {
   final double activePipelineValue;
   final int wonDealsCount;
   final double wonRevenueInPeriod;
+  final double verifiedRevenue;
   final int winRate;
   final int totalLeadsCount;
   final List<AgendaItem> todayAgenda;
   final List<LeadStatusCount> leadsByStatus;
+  final List<DealStageStat> allDealsByStage;
+  final List<DashboardTeamMember> teamMembers;
+  final String? dateFrom;
+  final String? dateTo;
 
   DashboardStats({
     required this.totalCalls,
@@ -35,17 +98,39 @@ class DashboardStats {
     required this.activePipelineValue,
     required this.wonDealsCount,
     required this.wonRevenueInPeriod,
+    required this.verifiedRevenue,
     required this.winRate,
     required this.totalLeadsCount,
     required this.todayAgenda,
     required this.leadsByStatus,
+    required this.allDealsByStage,
+    this.teamMembers = const [],
+    this.dateFrom,
+    this.dateTo,
   });
 
-  factory DashboardStats.fromJson(Map<String, dynamic> json) {
+  static int _parseInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
+
+  static double _parseDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  factory DashboardStats.fromJson(
+    Map<String, dynamic> json, {
+    List<DashboardTeamMember> teamMembers = const [],
+    String? dateFrom,
+    String? dateTo,
+  }) {
     final dispMap = <String, int>{};
     if (json['dispositionMap'] is Map) {
       (json['dispositionMap'] as Map).forEach((k, v) {
-        dispMap[k.toString()] = (v is num) ? v.toInt() : 0;
+        dispMap[k.toString()] = _parseInt(v);
       });
     }
 
@@ -67,26 +152,40 @@ class DashboardStats {
       }
     }
 
+    final dealsByStageList = <DealStageStat>[];
+    if (json['allDealsByStage'] is List) {
+      for (var d in (json['allDealsByStage'] as List)) {
+        if (d is Map<String, dynamic>) {
+          dealsByStageList.add(DealStageStat.fromJson(d));
+        }
+      }
+    }
+
     return DashboardStats(
-      totalCalls: json['totalCalls'] ?? 0,
-      uniqueDials: json['uniqueDials'] ?? 0,
-      connectedCalls: json['connectedCalls'] ?? 0,
-      connectRate: json['connectRate'] ?? 0,
-      talkTimeMins: json['talkTimeMins'] ?? 0,
+      totalCalls: _parseInt(json['totalCalls']),
+      uniqueDials: _parseInt(json['uniqueDials']),
+      connectedCalls: _parseInt(json['connectedCalls']),
+      connectRate: _parseInt(json['connectRate']),
+      talkTimeMins: _parseInt(json['talkTimeMins']),
       dispositionMap: dispMap,
-      queueRemainingCount: json['queueRemainingCount'] ?? 0,
-      unassignedLeadsCount: json['unassignedLeadsCount'] ?? 0,
-      todayCallbacksCount: json['todayCallbacksCount'] ?? 0,
-      todayDemosCount: json['todayDemosCount'] ?? 0,
-      overdueTasksCount: json['overdueTasksCount'] ?? 0,
-      activeDealsCount: json['activeDealsCount'] ?? 0,
-      activePipelineValue: (json['activePipelineValue'] as num?)?.toDouble() ?? 0.0,
-      wonDealsCount: json['wonDealsCount'] ?? 0,
-      wonRevenueInPeriod: (json['wonRevenueInPeriod'] as num?)?.toDouble() ?? 0.0,
-      winRate: json['winRate'] ?? 0,
-      totalLeadsCount: json['totalLeadsCount'] ?? 0,
+      queueRemainingCount: _parseInt(json['queueRemainingCount']),
+      unassignedLeadsCount: _parseInt(json['unassignedLeadsCount']),
+      todayCallbacksCount: _parseInt(json['todayCallbacksCount']),
+      todayDemosCount: _parseInt(json['todayDemosCount']),
+      overdueTasksCount: _parseInt(json['overdueTasksCount']),
+      activeDealsCount: _parseInt(json['activeDealsCount']),
+      activePipelineValue: _parseDouble(json['activePipelineValue']),
+      wonDealsCount: _parseInt(json['wonDealsCount']),
+      wonRevenueInPeriod: _parseDouble(json['wonRevenueInPeriod']),
+      verifiedRevenue: _parseDouble(json['verifiedRevenue']),
+      winRate: _parseInt(json['winRate']),
+      totalLeadsCount: _parseInt(json['totalLeadsCount']),
       todayAgenda: agendaList,
       leadsByStatus: statusList,
+      allDealsByStage: dealsByStageList,
+      teamMembers: teamMembers,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
     );
   }
 
@@ -107,10 +206,13 @@ class DashboardStats {
       activePipelineValue: 0.0,
       wonDealsCount: 0,
       wonRevenueInPeriod: 0.0,
+      verifiedRevenue: 0.0,
       winRate: 0,
       totalLeadsCount: 0,
       todayAgenda: [],
       leadsByStatus: [],
+      allDealsByStage: [],
+      teamMembers: [],
     );
   }
 }
@@ -160,7 +262,9 @@ class LeadStatusCount {
   factory LeadStatusCount.fromJson(Map<String, dynamic> json) {
     return LeadStatusCount(
       status: json['status']?.toString() ?? '',
-      count: (json['count'] is num) ? (json['count'] as num).toInt() : 0,
+      count: (json['count'] is num)
+          ? (json['count'] as num).toInt()
+          : int.tryParse(json['count']?.toString() ?? '0') ?? 0,
     );
   }
 }

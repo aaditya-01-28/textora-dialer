@@ -32,57 +32,64 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   static const List<Map<String, String>> _statusFilters = [
     {'id': 'all', 'label': 'All'},
     {'id': 'new', 'label': 'New'},
-    {'id': 'contacted', 'label': 'Contacted'},
-    {'id': 'qualified', 'label': 'Qualified'},
+    {'id': 'connected', 'label': 'Connected'},
+    {'id': 'callback', 'label': 'Callbacks'},
+    {'id': 'demos', 'label': 'Demos'},
+    {'id': 'deal', 'label': 'In Deal'},
     {'id': 'rnr', 'label': 'RNR'},
-    {'id': 'won', 'label': 'Won'},
+    {'id': 'won', 'label': 'Won 🏆'},
     {'id': 'lost', 'label': 'Lost'},
+    {'id': 'not_interested', 'label': 'Not Interested'},
+    {'id': 'other', 'label': 'Other'},
   ];
+
+  bool _isLeadMatchingFilter(LeadItem l, String filterId) {
+    if (filterId == 'all') return true;
+    final s = l.status.toLowerCase().trim();
+    switch (filterId) {
+      case 'new':
+        return s == 'new' || s == 'uncontacted';
+      case 'connected':
+        return s == 'connected' ||
+            s == 'contacted' ||
+            s.contains('callback') ||
+            s.contains('demo') ||
+            s.contains('deal') ||
+            l.callLogsCount > 0;
+      case 'callback':
+        return s.contains('callback');
+      case 'demos':
+        return s.contains('demo');
+      case 'deal':
+        return s.contains('deal') || s == 'proposal_sent' || s == 'negotiation';
+      case 'rnr':
+        return s == 'rnr';
+      case 'won':
+        return s == 'won' || s == 'converted';
+      case 'lost':
+        return s == 'lost' || s == 'junk';
+      case 'not_interested':
+        return s == 'not_interested' || s == 'not interested';
+      case 'other':
+        return s == 'already_using' ||
+            s == 'already_purchased' ||
+            s == 'future_requirement' ||
+            s == 'invalid' ||
+            (!['new', 'uncontacted', 'connected', 'contacted', 'rnr', 'won', 'converted', 'lost', 'junk', 'not_interested', 'not interested'].contains(s) &&
+             !s.contains('callback') && !s.contains('demo') && !s.contains('deal'));
+      default:
+        return s == filterId;
+    }
+  }
 
   List<LeadItem> get _filteredLeads {
     if (_selectedFilter == 'all') return _leads;
-    return _leads.where((l) {
-      final s = l.status.toLowerCase().trim();
-      switch (_selectedFilter) {
-        case 'new':
-          return s == 'new' || s == 'uncontacted';
-        case 'contacted':
-          return s == 'contacted';
-        case 'qualified':
-          return s == 'qualified';
-        case 'rnr':
-          return s == 'rnr';
-        case 'won':
-          return s == 'won' || s == 'converted';
-        case 'lost':
-          return s == 'lost' || s == 'junk' || s == 'not_interested';
-        default:
-          return s == _selectedFilter;
-      }
-    }).toList();
+    return _leads.where((l) => _isLeadMatchingFilter(l, _selectedFilter)).toList();
   }
 
   int _getCountForFilter(String filterId) {
     if (filterId == 'all') return _leads.length;
-    return _leads.where((l) {
-      final s = l.status.toLowerCase().trim();
-      switch (filterId) {
-        case 'new':
-          return s == 'new' || s == 'uncontacted';
-        case 'contacted':
-          return s == 'contacted';
-        case 'qualified':
-          return s == 'qualified';
-        case 'rnr':
-          return s == 'rnr';
-        case 'won':
-          return s == 'won' || s == 'converted';
-        case 'lost':
-          return s == 'lost' || s == 'junk' || s == 'not_interested';
-        default:
-          return s == filterId;
-      }
-    }).length;
+    return _leads.where((l) => _isLeadMatchingFilter(l, filterId)).length;
   }
 
   @override
@@ -671,24 +678,48 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
   Widget _buildLeadStatusBadge(String status) {
     Color color = const Color(0xFF94A3B8);
-    switch (status.toLowerCase()) {
-      case 'new':
-        color = const Color(0xFF38BDF8);
-        break;
-      case 'contacted':
-        color = const Color(0xFF06B6D4);
-        break;
-      case 'qualified':
-      case 'won':
-        color = const Color(0xFF10B981);
-        break;
-      case 'lost':
-      case 'junk':
-        color = Colors.redAccent;
-        break;
-      case 'rnr':
-        color = Colors.amber;
-        break;
+    String label = status.replaceAll('_', ' ').toUpperCase();
+
+    final s = status.toLowerCase().trim();
+    if (s == 'new' || s == 'uncontacted') {
+      color = const Color(0xFF38BDF8);
+      label = 'NEW';
+    } else if (s.contains('callback')) {
+      color = const Color(0xFF818CF8);
+      label = 'CALLBACK';
+    } else if (s == 'demo_scheduled' || s == 'demo') {
+      color = const Color(0xFFA855F7);
+      label = 'DEMO BOOKED';
+    } else if (s == 'demo_done') {
+      color = const Color(0xFF14B8A6);
+      label = 'DEMO DONE';
+    } else if (s.contains('deal')) {
+      color = const Color(0xFFF59E0B);
+      label = 'IN DEAL';
+    } else if (s == 'won' || s == 'converted') {
+      color = const Color(0xFF10B981);
+      label = 'WON 🏆';
+    } else if (s == 'lost' || s == 'junk') {
+      color = Colors.redAccent;
+      label = 'LOST';
+    } else if (s == 'rnr') {
+      color = Colors.amber;
+      label = 'RNR';
+    } else if (s == 'not_interested') {
+      color = const Color(0xFF64748B);
+      label = 'NOT INTERESTED';
+    } else if (s == 'already_using') {
+      color = const Color(0xFF059669);
+      label = 'ALREADY USING';
+    } else if (s == 'already_purchased') {
+      color = const Color(0xFFEA580C);
+      label = 'PURCHASED OTHER';
+    } else if (s == 'future_requirement') {
+      color = const Color(0xFF0284C7);
+      label = 'FUTURE REQ';
+    } else if (s == 'contacted' || s == 'connected') {
+      color = const Color(0xFF06B6D4);
+      label = 'CONNECTED';
     }
 
     return Container(
@@ -699,7 +730,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
         border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
       ),
       child: Text(
-        status.toUpperCase(),
+        label,
         style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
