@@ -479,6 +479,31 @@ class ApiService {
     }
     return res.statusCode == 200;
   }
+
+  /// Fetch Scheduled Agenda & Tasks (Today, Overdue, Upcoming)
+  Future<Map<String, dynamic>> getAgendaTasks() async {
+    final baseUrl = await _storage.getBaseUrl();
+    final url = Uri.parse('$baseUrl/api/tasks');
+    final headers = await _headers();
+
+    final res = await http.get(url, headers: headers);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        final retryHeaders = await _headers();
+        final retryRes = await http.get(url, headers: retryHeaders);
+        if (retryRes.statusCode == 200) {
+          return jsonDecode(retryRes.body) as Map<String, dynamic>;
+        }
+      }
+      throw Exception('Session expired. Please log in again.');
+    }
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load tasks');
+    }
+
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
 }
 
 

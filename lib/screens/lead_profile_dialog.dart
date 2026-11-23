@@ -405,20 +405,35 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  _buildStatusPill(_currentLead.status),
-                  if (_currentLead.rnrCount > 0) ...[
-                    const SizedBox(width: 6),
+                  if (_currentLead.status.toLowerCase() == 'rnr') ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
                       ),
                       child: Text(
-                        'RNR ×${_currentLead.rnrCount}',
+                        _currentLead.rnrCount > 0 ? 'RNR ×${_currentLead.rnrCount}' : 'RNR',
                         style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                     ),
+                  ] else ...[
+                    _buildStatusPill(_currentLead.status),
+                    if (_currentLead.rnrCount > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'RNR ×${_currentLead.rnrCount}',
+                          style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -802,6 +817,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 final disp = log['disposition'] ?? 'Unknown';
                 final dur = log['durationSeconds'] ?? 0;
                 final rawTime = log['callTimestamp']?.toString() ?? '';
+                final remark = log['remark']?.toString()?.trim();
                 final isConnected = disp.toString().toLowerCase().contains('connect');
 
                 String displayTime = rawTime;
@@ -820,34 +836,57 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          isConnected ? Icons.call_made_rounded : Icons.call_missed_rounded,
-                          color: isConnected ? const Color(0xFF10B981) : Colors.amber,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              disp,
-                              style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 12),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Icon(
+                              isConnected ? Icons.call_made_rounded : Icons.call_missed_rounded,
+                              color: isConnected ? const Color(0xFF10B981) : Colors.amber,
+                              size: 16,
                             ),
-                            Text(
-                              displayTime,
-                              style: TextStyle(color: subColor, fontSize: 10),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  disp,
+                                  style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                                Text(
+                                  displayTime,
+                                  style: TextStyle(color: subColor, fontSize: 10),
+                                ),
+                                if (remark != null && remark.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '💬 $remark',
+                                    style: TextStyle(
+                                      color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${dur}s',
                       style: TextStyle(color: subColor, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ],
+                );
                 );
               },
             ),

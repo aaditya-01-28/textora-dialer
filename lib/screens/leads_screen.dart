@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/lead_item.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
@@ -29,7 +30,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
   String _selectedFilter = 'all';
 
-  static const List<Map<String, String>> _statusFilters = [
+  static const List<Map<String, String>> _defaultFilters = [
     {'id': 'all', 'label': 'All'},
     {'id': 'new', 'label': 'New'},
     {'id': 'connected', 'label': 'Connected'},
@@ -37,11 +38,16 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     {'id': 'demos', 'label': 'Demos'},
     {'id': 'deal', 'label': 'In Deal'},
     {'id': 'rnr', 'label': 'RNR'},
+    {'id': 'already_using', 'label': 'Already Using'},
+    {'id': 'future_requirement', 'label': 'Future Req'},
+    {'id': 'already_purchased', 'label': 'Purchased Other'},
+    {'id': 'not_interested', 'label': 'Not Interested'},
     {'id': 'won', 'label': 'Won 🏆'},
     {'id': 'lost', 'label': 'Lost'},
-    {'id': 'not_interested', 'label': 'Not Interested'},
     {'id': 'other', 'label': 'Other'},
   ];
+
+  late List<Map<String, String>> _statusFilters = List.from(_defaultFilters);
 
   bool _isLeadMatchingFilter(LeadItem l, String filterId) {
     if (filterId == 'all') return true;
@@ -50,12 +56,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
       case 'new':
         return s == 'new' || s == 'uncontacted';
       case 'connected':
-        return s == 'connected' ||
-            s == 'contacted' ||
-            s.contains('callback') ||
-            s.contains('demo') ||
-            s.contains('deal') ||
-            l.callLogsCount > 0;
+        return s == 'connected' || s == 'contacted';
       case 'callback':
         return s.contains('callback');
       case 'demos':
@@ -64,22 +65,48 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
         return s.contains('deal') || s == 'proposal_sent' || s == 'negotiation';
       case 'rnr':
         return s == 'rnr';
+      case 'already_using':
+        return s == 'already_using' || s == 'already using';
+      case 'future_requirement':
+        return s == 'future_requirement' || s == 'future requirement';
+      case 'already_purchased':
+        return s == 'already_purchased' || s == 'already purchased';
+      case 'not_interested':
+        return s == 'not_interested' || s == 'not interested';
       case 'won':
         return s == 'won' || s == 'converted';
       case 'lost':
         return s == 'lost' || s == 'junk';
-      case 'not_interested':
-        return s == 'not_interested' || s == 'not interested';
       case 'other':
-        return s == 'already_using' ||
-            s == 'already_purchased' ||
-            s == 'future_requirement' ||
-            s == 'invalid' ||
-            (!['new', 'uncontacted', 'connected', 'contacted', 'rnr', 'won', 'converted', 'lost', 'junk', 'not_interested', 'not interested'].contains(s) &&
+        return s == 'invalid' ||
+            (!['new', 'uncontacted', 'connected', 'contacted', 'rnr', 'won', 'converted', 'lost', 'junk', 'not_interested', 'not interested', 'already_using', 'future_requirement', 'already_purchased'].contains(s) &&
              !s.contains('callback') && !s.contains('demo') && !s.contains('deal'));
       default:
         return s == filterId;
     }
+  }
+
+  Future<void> _loadTabOrder() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getStringList('leads_tab_order');
+      if (saved != null && saved.isNotEmpty) {
+        final map = {for (var f in _defaultFilters) f['id']!: f};
+        final reordered = <Map<String, String>>[];
+        for (var id in saved) {
+          if (map.containsKey(id)) {
+            reordered.add(map[id]!);
+            map.remove(id);
+          }
+        }
+        reordered.addAll(map.values);
+        if (mounted) {
+          setState(() {
+            _statusFilters = reordered;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   List<LeadItem> get _filteredLeads {
@@ -96,6 +123,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadTabOrder();
     _loadLeads();
     _telephony.checkAndRequestPermissions();
     _telephony.clearCallState();
@@ -386,94 +414,115 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
   Widget _buildFilterChips(bool isDark) {
     return Container(
-      height: 38,
+      height: 42,
       margin: const EdgeInsets.only(bottom: 6),
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ReorderableListView.builder(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        buildDefaultDragHandles: false,
         itemCount: _statusFilters.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        onReorder: (oldIndex, newIndex) async {
+          setState(() {
+            if (newIndex > oldIndex) newIndex -= 1;
+            final item = _statusFilters.removeAt(oldIndex);
+            _statusFilters.insert(newIndex, item);
+          });
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setStringList(
+              'leads_tab_order',
+              _statusFilters.map((f) => f['id']!).toList(),
+            );
+          } catch (_) {}
+        },
         itemBuilder: (context, index) {
           final filter = _statusFilters[index];
           final filterId = filter['id']!;
           final isSelected = _selectedFilter == filterId;
           final count = _getCountForFilter(filterId);
 
-          return InkWell(
-            onTap: () {
-              setState(() {
-                _selectedFilter = filterId;
-              });
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF059669)
-                    : isDark
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFFF1F5F9),
+          return ReorderableDelayedDragStartListener(
+            key: ValueKey(filterId),
+            index: index,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedFilter = filterId;
+                  });
+                },
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFF10B981)
-                      : isDark
-                          ? const Color(0xFF334155).withValues(alpha: 0.6)
-                          : const Color(0xFFCBD5E1),
-                  width: isSelected ? 1.4 : 1.0,
-                ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF059669)
+                        : isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF10B981)
+                          : isDark
+                              ? const Color(0xFF334155).withValues(alpha: 0.6)
+                              : const Color(0xFFCBD5E1),
+                      width: isSelected ? 1.4 : 1.0,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        filter['label']!,
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : isDark
+                                  ? const Color(0xFFCBD5E1)
+                                  : const Color(0xFF334155),
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                         ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    filter['label']!,
-                    style: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : isDark
-                              ? const Color(0xFFCBD5E1)
-                              : const Color(0xFF334155),
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.black.withValues(alpha: 0.25)
-                          : isDark
-                              ? Colors.black.withValues(alpha: 0.2)
-                              : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : isDark
-                                ? const Color(0xFF94A3B8)
-                                : const Color(0xFF64748B),
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.black.withValues(alpha: 0.25)
+                              : isDark
+                                  ? Colors.black.withValues(alpha: 0.2)
+                                  : const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : isDark
+                                    ? const Color(0xFF94A3B8)
+                                    : const Color(0xFF64748B),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           );
@@ -566,20 +615,34 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                   const SizedBox(width: 8),
                   Row(
                     children: [
-                      if (lead.rnrCount > 0)
+                      if (lead.status.toLowerCase() == 'rnr')
                         Container(
-                          margin: const EdgeInsets.only(right: 6),
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.amber.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            'RNR ×${lead.rnrCount}',
+                            lead.rnrCount > 0 ? 'RNR ×${lead.rnrCount}' : 'RNR',
                             style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
-                        ),
-                      _buildLeadStatusBadge(lead.status),
+                        )
+                      else ...[
+                        if (lead.rnrCount > 0)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'RNR ×${lead.rnrCount}',
+                              style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        _buildLeadStatusBadge(lead.status),
+                      ],
                     ],
                   ),
                 ],

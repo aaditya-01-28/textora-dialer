@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/user_profile.dart';
+import '../services/agenda_reminder_service.dart';
+import '../services/telephony_service.dart';
 import 'dashboard_screen.dart';
 import 'leads_screen.dart';
 import 'call_history_screen.dart';
@@ -22,6 +25,96 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _currentUser = widget.user;
+    _startAgendaReminders();
+  }
+
+  @override
+  void dispose() {
+    AgendaReminderService().stopListening();
+    super.dispose();
+  }
+
+  void _startAgendaReminders() {
+    AgendaReminderService().startListening(
+      onReminder: (task, type) {
+        if (!mounted) return;
+        final lead = task['lead'] as Map<String, dynamic>? ?? {};
+        final contactName = lead['contactName']?.toString();
+        final companyName = lead['companyName']?.toString();
+        final phone = lead['phoneNumber']?.toString();
+        final meetingLink = task['meetingLink']?.toString();
+        final leadId = task['leadId']?.toString();
+
+        final target = (companyName != null && companyName.isNotEmpty)
+            ? companyName
+            : (contactName != null && contactName.isNotEmpty)
+                ? contactName
+                : (phone != null && phone.isNotEmpty)
+                    ? phone
+                    : 'Scheduled Task';
+
+        final is5Min = type == '5min';
+        final title = is5Min ? '⏰ In 5 Min' : '🔔 Time Now!';
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: is5Min ? const Color(0xFFD97706) : const Color(0xFF059669),
+            duration: const Duration(seconds: 12),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      is5Min ? Icons.access_time_filled : Icons.notifications_active,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$title: $target',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                if (task['notes'] != null && task['notes'].toString().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    task['notes'].toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.white70),
+                  ),
+                ],
+              ],
+            ),
+            action: phone != null && phone.isNotEmpty
+                ? SnackBarAction(
+                    label: 'CALL NOW',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      TelephonyService().makeCall(rawPhone: phone, leadId: leadId);
+                    },
+                  )
+                : meetingLink != null && meetingLink.isNotEmpty
+                    ? SnackBarAction(
+                        label: 'JOIN',
+                        textColor: Colors.white,
+                        onPressed: () {
+                          launchUrl(Uri.parse(meetingLink), mode: LaunchMode.externalApplication);
+                        },
+                      )
+                    : null,
+          ),
+        );
+      },
+    );
   }
 
   void _onProfileUpdated(UserProfile updated) {
