@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
@@ -180,9 +181,10 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
     final finalRecord = callRecord ??
         CallSyncItem(
+          id: 'manual_${DateTime.now().millisecondsSinceEpoch}',
           leadId: lead.id,
           phoneNumber: lead.phoneNumber,
-          callTimestamp: DateTime.now(),
+          callTimestamp: DateTime.now().toUtc().toIso8601String(),
           durationSeconds: 0,
           disposition: 'Connected',
         );
