@@ -492,7 +492,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Version Identifier
                 const Center(
                   child: Text(
-                    'Textora Companion v1.1.0 • Build 2',
+                    'Textora Companion v1.1.0',
                     style: TextStyle(
                       color: Color(0xFF64748B),
                       fontSize: 11,

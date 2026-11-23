@@ -28,7 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   late UserProfile _currentUser;
   bool _isLoading = false;
-  String _appVersion = 'v1.1.0 (Build 2)';
+  String _appVersion = 'v1.1.0';
   bool _isCheckingUpdate = false;
 
   // Accessibility Preferences
@@ -50,7 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) {
         setState(() {
-          _appVersion = 'v${info.version} (Build ${info.buildNumber})';
+          _appVersion = 'v${info.version}';
         });
       }
     } catch (_) {}
