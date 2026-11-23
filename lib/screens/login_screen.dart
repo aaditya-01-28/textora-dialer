@@ -487,6 +487,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 18),
+
+                // Version Identifier
+                const Center(
+                  child: Text(
+                    'Textora Companion v1.1.0 • Build 2',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
               ],
             ),
           ),

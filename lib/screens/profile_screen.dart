@@ -438,7 +438,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
+
+          // Platform & Server Connectivity Footer
+          Center(
+            child: Text(
+              'Textora Dialer $_appVersion • crm.textorasms.com',
+              style: TextStyle(
+                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );

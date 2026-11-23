@@ -277,16 +277,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              widget.user.tenantName,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF10B981),
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.user.tenantName,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'v1.1.0',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
             Text(
               'Sales Performance Dashboard',
