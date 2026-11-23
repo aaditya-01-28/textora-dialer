@@ -148,8 +148,19 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // When the sales rep returns to the app from the native phone call:
-    if (state == AppLifecycleState.resumed && _callingLead != null) {
-      _checkRecentCall(_callingLead!);
+    if (state == AppLifecycleState.resumed) {
+      if (_callingLead != null) {
+        _checkRecentCall(_callingLead!);
+      } else if (_telephony.activeLeadId != null) {
+        final activeId = _telephony.activeLeadId;
+        final matchedLead = _leads.cast<LeadItem?>().firstWhere(
+          (l) => l?.id == activeId,
+          orElse: () => null,
+        );
+        if (matchedLead != null) {
+          _checkRecentCall(matchedLead);
+        }
+      }
     }
   }
 
@@ -165,20 +176,29 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
     await _telephony.clearCallState();
 
-    if (callRecord != null && mounted) {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        isDismissible: false,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (_) => PostCallDialog(
-          lead: lead,
-          call: callRecord,
-          onSaved: () => _loadLeads(silent: false),
-        ),
-      );
-    }
+    if (!mounted) return;
+
+    final finalRecord = callRecord ??
+        CallSyncItem(
+          leadId: lead.id,
+          phoneNumber: lead.phoneNumber,
+          callTimestamp: DateTime.now(),
+          durationSeconds: 0,
+          disposition: 'Connected',
+        );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => PostCallDialog(
+        lead: lead,
+        call: finalRecord,
+        onSaved: () => _loadLeads(silent: false),
+      ),
+    );
   }
 
   Future<void> _loadLeads({bool silent = false}) async {
