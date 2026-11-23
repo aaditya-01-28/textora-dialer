@@ -53,26 +53,13 @@ class _PostCallDialogState extends State<PostCallDialog> {
     final remark = _remarkController.text.trim();
 
     final api = ApiService();
-    // 1. Dispose in CRM
+    // 1. Dispose in CRM — this updates lead status, tasks, pipeline, and records the call log as apk_manual
     await api.disposeLead(
       leadId: widget.lead.id,
       disposition: _disposition,
       durationSeconds: widget.call.durationSeconds,
       remark: remark.isNotEmpty ? remark : null,
     );
-
-    // 2. Also ensure CallLog is synced as APK manual update
-    final updatedCall = CallSyncItem(
-      id: widget.call.id,
-      leadId: widget.lead.id,
-      phoneNumber: widget.lead.phoneNumber,
-      durationSeconds: widget.call.durationSeconds,
-      disposition: _disposition,
-      callTimestamp: widget.call.callTimestamp,
-      remark: remark.isNotEmpty ? remark : null,
-      logSource: 'apk_manual',
-    );
-    await api.syncCallLog(updatedCall);
 
     if (!mounted) return;
     widget.onSaved();

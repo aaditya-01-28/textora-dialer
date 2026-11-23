@@ -219,11 +219,22 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                call.callTimestamp.length > 16
-                                    ? call.callTimestamp.substring(11, 16)
-                                    : '',
-                                style: TextStyle(color: subColor, fontSize: 10),
+                              Builder(
+                                builder: (_) {
+                                  String timeStr = '';
+                                  try {
+                                    final dt = DateTime.parse(call.callTimestamp).toLocal();
+                                    final h = dt.hour.toString().padLeft(2, '0');
+                                    final m = dt.minute.toString().padLeft(2, '0');
+                                    timeStr = '$h:$m';
+                                  } catch (_) {
+                                    timeStr = call.callTimestamp.length > 16 ? call.callTimestamp.substring(11, 16) : '';
+                                  }
+                                  return Text(
+                                    timeStr,
+                                    style: TextStyle(color: subColor, fontSize: 10),
+                                  );
+                                },
                               ),
                             ],
                           ),

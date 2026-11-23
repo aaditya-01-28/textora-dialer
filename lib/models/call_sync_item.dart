@@ -30,7 +30,7 @@ class CallSyncItem {
       phoneNumber: json['phoneNumber'] ?? '',
       durationSeconds: json['durationSeconds'] is int ? json['durationSeconds'] : 0,
       disposition: json['disposition'] ?? 'Connected',
-      callTimestamp: json['callTimestamp'] ?? DateTime.now().toIso8601String(),
+      callTimestamp: json['callTimestamp'] ?? DateTime.now().toUtc().toIso8601String(),
       remark: json['remark'],
       recordingUrl: json['recordingUrl'] ?? json['recording_url'],
       logSource: json['logSource'] ?? 'apk_manual',

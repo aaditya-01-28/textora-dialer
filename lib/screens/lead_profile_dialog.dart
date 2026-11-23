@@ -801,8 +801,21 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 final log = _callLogs[index];
                 final disp = log['disposition'] ?? 'Unknown';
                 final dur = log['durationSeconds'] ?? 0;
-                final time = log['callTimestamp']?.toString() ?? '';
+                final rawTime = log['callTimestamp']?.toString() ?? '';
                 final isConnected = disp.toString().toLowerCase().contains('connect');
+
+                String displayTime = rawTime;
+                try {
+                  final parsed = DateTime.parse(rawTime).toLocal();
+                  final y = parsed.year.toString().padLeft(4, '0');
+                  final mo = parsed.month.toString().padLeft(2, '0');
+                  final da = parsed.day.toString().padLeft(2, '0');
+                  final ho = parsed.hour.toString().padLeft(2, '0');
+                  final mi = parsed.minute.toString().padLeft(2, '0');
+                  displayTime = '$y-$mo-$da $ho:$mi';
+                } catch (_) {
+                  displayTime = rawTime.length >= 16 ? rawTime.substring(0, 16).replaceAll('T', ' ') : rawTime;
+                }
 
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -823,7 +836,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                               style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                             Text(
-                              time.length >= 16 ? time.substring(0, 16).replaceAll('T', ' ') : time,
+                              displayTime,
                               style: TextStyle(color: subColor, fontSize: 10),
                             ),
                           ],

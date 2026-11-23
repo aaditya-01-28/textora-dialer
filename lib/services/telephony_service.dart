@@ -165,7 +165,8 @@ class TelephonyService {
       if (matchedEntry != null) {
         final duration = matchedEntry.duration ?? 0;
         final timestampEpoch = matchedEntry.timestamp ?? DateTime.now().millisecondsSinceEpoch;
-        final timestampIso = DateTime.fromMillisecondsSinceEpoch(timestampEpoch).toIso8601String();
+        // Use isUtc: true so ISO string ends with 'Z' and is parsed correctly without timezone distortion
+        final timestampIso = DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
         final disposition = duration > 0 ? 'Connected' : 'RNR';
 
         // Check for newly recorded audio file from native recorder
@@ -195,8 +196,11 @@ class TelephonyService {
         // Store locally
         await _storage.saveCallRecord(item);
 
-        // Attempt immediate push to CRM
-        _api.syncCallLog(item);
+        // If this call belongs to an active lead, PostCallDialog will handle disposition.
+        // Only auto-sync here if there is no active lead dossier attached to avoid duplicate entries.
+        if (activeLeadId == null) {
+          _api.syncCallLog(item);
+        }
 
         return item;
       }
