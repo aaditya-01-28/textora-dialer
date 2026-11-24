@@ -1517,9 +1517,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(width: 8),
         Text(
-          item.scheduledTime.length >= 16
-              ? item.scheduledTime.substring(11, 16)
-              : (item.scheduledTime.isEmpty ? 'Pending' : item.taskType),
+          () {
+            if (item.scheduledTime.isEmpty) return 'Pending';
+            final parsed = DateTime.tryParse(item.scheduledTime)?.toLocal();
+            if (parsed != null) {
+              final h = parsed.hour % 12 == 0 ? 12 : parsed.hour % 12;
+              final m = parsed.minute.toString().padLeft(2, '0');
+              final ampm = parsed.hour >= 12 ? 'PM' : 'AM';
+              return '$h:$m $ampm';
+            }
+            return item.scheduledTime.length >= 16
+                ? item.scheduledTime.substring(11, 16)
+                : item.taskType;
+          }(),
           style: TextStyle(
             color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF38BDF8),
             fontWeight: FontWeight.bold,
