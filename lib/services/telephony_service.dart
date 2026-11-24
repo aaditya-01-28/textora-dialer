@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/call_sync_item.dart';
+import '../models/lead_item.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
 
@@ -266,6 +267,73 @@ class TelephonyService {
     } catch (e) {
       // Android permission or provider error
     }
+
+    return null;
+  }
+
+  /// Inspect Android CallLog for recent un-synced incoming calls from active CRM leads
+  Future<Map<String, dynamic>?> detectLastInboundCall() async {
+    // Only check if no outbound call is currently being dialed
+    if (activeLeadId != null || activeDialedNumber != null) return null;
+
+    final hasPerms = await checkAndRequestPermissions();
+    if (!hasPerms) return null;
+
+    try {
+      // Look back 30 minutes for any completed incoming calls
+      final lookbackEpoch = DateTime.now().subtract(const Duration(minutes: 30)).millisecondsSinceEpoch;
+      final Iterable<CallLogEntry> entries = await CallLog.query(dateFrom: lookbackEpoch);
+
+      for (var entry in entries) {
+        // Strict Check 1: Must be an INCOMING call!
+        if (entry.callType != CallType.incoming) continue;
+
+        // Strict Check 2: Must have connected talk time > 0 seconds
+        final duration = (entry.duration != null && entry.duration! > 0) ? entry.duration! : 0;
+        if (duration <= 0) continue;
+
+        // Strict Check 3: Check timestamp
+        final timestampEpoch = entry.timestamp;
+        if (timestampEpoch == null || timestampEpoch < lookbackEpoch) continue;
+
+        final rawNumber = entry.number ?? '';
+        final cleanDigits = rawNumber.replaceAll(RegExp(r'\D'), '');
+        final suffix = cleanDigits.length >= 10 ? cleanDigits.substring(cleanDigits.length - 10) : cleanDigits;
+        if (suffix.isEmpty) continue;
+
+        // Signature for deduplication: inbound_phone_timestamp_duration
+        final signature = 'inbound_${suffix}_${timestampEpoch}_$duration';
+        final isProcessed = await _storage.isCallSignatureProcessed(signature);
+        if (isProcessed) continue;
+
+        // Strict Check 4: Must match an assigned CRM lead!
+        final matchedLead = await _api.findLeadByPhone(suffix);
+        if (matchedLead != null) {
+          final timestampIso = DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
+
+          final callItem = CallSyncItem(
+            id: 'inbound_${DateTime.now().millisecondsSinceEpoch}',
+            leadId: matchedLead.id,
+            phoneNumber: rawNumber.isNotEmpty ? rawNumber : matchedLead.phoneNumber,
+            durationSeconds: duration,
+            disposition: 'Connected',
+            callTimestamp: timestampIso,
+            remark: 'Customer called back after RNR',
+            logSource: 'inbound_sim',
+            isSynced: false,
+          );
+
+          return {
+            'lead': matchedLead,
+            'call': callItem,
+            'signature': signature,
+          };
+        } else {
+          // If the caller is not a CRM lead (personal call), mark as processed so we don't query repeatedly
+          await _storage.markCallSignatureProcessed(signature);
+        }
+      }
+    } catch (_) {}
 
     return null;
   }

@@ -8,12 +8,16 @@ class PostCallDialog extends StatefulWidget {
   final LeadItem lead;
   final CallSyncItem call;
   final VoidCallback onSaved;
+  final VoidCallback? onDismissed;
+  final bool isInbound;
 
   const PostCallDialog({
     super.key,
     required this.lead,
     required this.call,
     required this.onSaved,
+    this.onDismissed,
+    this.isInbound = false,
   });
 
   @override
@@ -44,15 +48,20 @@ class _PostCallDialogState extends State<PostCallDialog> {
   @override
   void initState() {
     super.initState();
-    final d = widget.call.disposition;
-    if (d.contains('Other') || d.contains('Competitor') || d.contains('Purchased')) {
-      _disposition = 'Already Using';
-      _serviceOwner = 'other';
-    } else if (d.contains('Our Service')) {
-      _disposition = 'Already Using';
-      _serviceOwner = 'our';
+    if (widget.isInbound) {
+      _disposition = 'Connected';
+      _remarkController.text = 'Customer called back after RNR';
     } else {
-      _disposition = d;
+      final d = widget.call.disposition;
+      if (d.contains('Other') || d.contains('Competitor') || d.contains('Purchased')) {
+        _disposition = 'Already Using';
+        _serviceOwner = 'other';
+      } else if (d.contains('Our Service')) {
+        _disposition = 'Already Using';
+        _serviceOwner = 'our';
+      } else {
+        _disposition = d;
+      }
     }
   }
 
@@ -178,6 +187,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
       meetingLink: meetingLink,
       callTimestamp: widget.call.callTimestamp,
       callLogId: widget.call.id,
+      logSource: widget.isInbound ? 'inbound_sim' : 'apk_manual',
     );
 
     if (!mounted) return;
@@ -208,9 +218,12 @@ class _PostCallDialogState extends State<PostCallDialog> {
     final chipBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
 
     return PopScope(
-      canPop: false,
+      canPop: widget.isInbound,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          widget.onDismissed?.call();
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('⚠️ Call disposition is required. Please select an option and click Save to finish.'),
@@ -256,27 +269,85 @@ class _PostCallDialogState extends State<PostCallDialog> {
                 ),
               ),
               const SizedBox(height: 12),
+              if (widget.isInbound) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.call_received, size: 12, color: Color(0xFF38BDF8)),
+                          SizedBox(width: 4),
+                          Text(
+                            'INBOUND CUSTOMER CALL',
+                            style: TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        widget.onDismissed?.call();
+                        Navigator.of(context).pop();
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(40, 24),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Skip',
+                        style: TextStyle(
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Call Completed',
-                        style: TextStyle(
-                          color: titleColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.isInbound ? 'Inbound Call Connected' : 'Call Completed',
+                          style: TextStyle(
+                            color: titleColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.lead.displayName,
-                        style: TextStyle(color: subColor, fontSize: 13),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.isInbound
+                              ? '${widget.lead.displayName} (Customer Called Back)'
+                              : widget.lead.displayName,
+                          style: TextStyle(color: subColor, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(

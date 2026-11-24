@@ -2,14 +2,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/user_profile.dart';
+import '../models/lead_item.dart';
+import '../models/call_sync_item.dart';
 import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 import '../services/update_service.dart';
 import 'dashboard_screen.dart';
 import 'leads_screen.dart';
 import 'call_history_screen.dart';
 import 'profile_screen.dart';
+import 'post_call_dialog.dart';
 
 class HomeShell extends StatefulWidget {
   final UserProfile user;
@@ -37,11 +41,55 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
   }
 
+  bool _isCheckingInbound = false;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshProfile();
       _checkForUpdates();
+      _checkInboundCalls();
+    }
+  }
+
+  Future<void> _checkInboundCalls() async {
+    if (_isCheckingInbound) return;
+    _isCheckingInbound = true;
+
+    try {
+      // Delay slightly so Android telephony provider can finish writing the call entry
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (!mounted) return;
+
+      final result = await TelephonyService().detectLastInboundCall();
+      if (result != null && mounted) {
+        final lead = result['lead'] as LeadItem;
+        final call = result['call'] as CallSyncItem;
+        final signature = result['signature'] as String;
+
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          isDismissible: true,
+          enableDrag: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => PostCallDialog(
+            lead: lead,
+            call: call,
+            isInbound: true,
+            onDismissed: () {
+              StorageService().markCallSignatureProcessed(signature);
+            },
+            onSaved: () {
+              StorageService().markCallSignatureProcessed(signature);
+              _refreshProfile();
+            },
+          ),
+        );
+      }
+    } catch (_) {
+    } finally {
+      _isCheckingInbound = false;
     }
   }
 

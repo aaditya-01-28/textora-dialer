@@ -123,6 +123,24 @@ class ApiService {
     return list.map((json) => LeadItem.fromJson(json)).toList();
   }
 
+  /// Find CRM Lead by Phone Number (matching last 10 digits)
+  Future<LeadItem?> findLeadByPhone(String rawPhone) async {
+    final cleanDigits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    final suffix = cleanDigits.length >= 10 ? cleanDigits.substring(cleanDigits.length - 10) : cleanDigits;
+    if (suffix.isEmpty) return null;
+
+    try {
+      final list = await getLeads(search: suffix);
+      for (var l in list) {
+        final leadDigits = l.phoneNumber.replaceAll(RegExp(r'\D'), '');
+        if (leadDigits.endsWith(suffix) || suffix.endsWith(leadDigits)) {
+          return l;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Get the Next Queue Lead for Fast Calling
   Future<LeadItem?> getNextQueueLead() async {
     final baseUrl = await _storage.getBaseUrl();
@@ -311,6 +329,7 @@ class ApiService {
     String? meetingLink,
     String? callTimestamp,
     String? callLogId,
+    String? logSource,
   }) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/dispose');
@@ -320,7 +339,7 @@ class ApiService {
       'disposition': disposition,
       'durationSeconds': durationSeconds,
       'remark': remark,
-      'logSource': 'apk_manual',
+      'logSource': logSource ?? 'apk_manual',
     };
     if (callbackDatetime != null) payload['callbackDatetime'] = callbackDatetime;
     if (demoDatetime != null) payload['demoDatetime'] = demoDatetime;

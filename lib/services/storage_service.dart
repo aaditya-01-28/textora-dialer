@@ -99,6 +99,23 @@ class StorageService {
     await prefs.setStringList(_keyCallQueue, encoded);
   }
 
+  static const String _keyProcessedInboundCalls = 'processed_inbound_calls';
+
+  Future<bool> isCallSignatureProcessed(String signature) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_keyProcessedInboundCalls) ?? [];
+    return list.contains(signature);
+  }
+
+  Future<void> markCallSignatureProcessed(String signature) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_keyProcessedInboundCalls) ?? [];
+    if (!list.contains(signature)) {
+      list.insert(0, signature);
+      await prefs.setStringList(_keyProcessedInboundCalls, list.take(300).toList());
+    }
+  }
+
   Future<void> updateCallRecordSyncStatus(String id, bool isSynced) async {
     final prefs = await SharedPreferences.getInstance();
     final current = await getCallHistory();
