@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_reminder_service.dart';
+import '../services/api_service.dart';
 import '../services/telephony_service.dart';
 import '../services/update_service.dart';
 import 'dashboard_screen.dart';
@@ -18,18 +20,45 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   late UserProfile _currentUser;
+  Timer? _profileSyncTimer;
 
   @override
   void initState() {
     super.initState();
     _currentUser = widget.user;
+    WidgetsBinding.instance.addObserver(this);
     _startAgendaReminders();
+    _startProfileSync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForUpdates();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshProfile();
+      _checkForUpdates();
+    }
+  }
+
+  void _startProfileSync() {
+    // Check for profile changes (phone, language, etc.) every 20 seconds
+    _profileSyncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      _refreshProfile();
+    });
+  }
+
+  Future<void> _refreshProfile() async {
+    try {
+      final updated = await ApiService().getDetailedProfile();
+      if (mounted) {
+        setState(() => _currentUser = updated);
+      }
+    } catch (_) {}
   }
 
   void _checkForUpdates() async {
@@ -43,6 +72,8 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _profileSyncTimer?.cancel();
     AgendaReminderService().stopListening();
     super.dispose();
   }
@@ -167,7 +198,12 @@ class _HomeShellState extends State<HomeShell> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) {
+            setState(() => _currentIndex = index);
+            if (index == 3) {
+              _refreshProfile();
+            }
+          },
           backgroundColor: Colors.transparent,
           elevation: 0,
           selectedItemColor: selected,

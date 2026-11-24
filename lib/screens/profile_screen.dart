@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = false;
   String _appVersion = 'v1.1.0';
   bool _isCheckingUpdate = false;
+  Timer? _autoRefreshTimer;
 
   // Accessibility Preferences
   double _fontScale = 1.0;
@@ -41,8 +43,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _currentUser = widget.user;
     _loadAccessibilityPrefs();
-    _fetchLatestProfile();
+    _fetchLatestProfile(silent: true);
     _loadAppVersion();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) {
+        _fetchLatestProfile(silent: true);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.user != oldWidget.user) {
+      setState(() => _currentUser = widget.user);
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAppVersion() async {
@@ -93,15 +118,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() => _hapticFeedback = val);
   }
 
-  Future<void> _fetchLatestProfile() async {
+  Future<void> _fetchLatestProfile({bool silent = false}) async {
+    if (!silent && mounted) {
+      setState(() => _isLoading = true);
+    }
     try {
       final updated = await _api.getDetailedProfile();
       if (mounted) {
-        setState(() => _currentUser = updated);
+        setState(() {
+          _currentUser = updated;
+          if (!silent) _isLoading = false;
+        });
         widget.onProfileUpdated?.call(updated);
       }
     } catch (_) {
-      // Offline fallback: keep cached profile
+      if (!silent && mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _formatLanguage(String? lang) {
+    if (lang == null || lang.isEmpty) return 'English (EN)';
+    final l = lang.toLowerCase().trim();
+    switch (l) {
+      case 'hi':
+      case 'hindi':
+        return 'Hindi (हिन्दी)';
+      case 'en':
+      case 'english':
+        return 'English (EN)';
+      case 'mr':
+      case 'marathi':
+        return 'Marathi (मराठी)';
+      case 'gu':
+      case 'gujarati':
+        return 'Gujarati (ગુજરાતી)';
+      case 'te':
+      case 'telugu':
+        return 'Telugu (తెలుగు)';
+      case 'ta':
+      case 'tamil':
+        return 'Tamil (தமிழ்)';
+      case 'kn':
+      case 'kannada':
+        return 'Kannada (ಕನ್ನಡ)';
+      case 'ml':
+      case 'malayalam':
+        return 'Malayalam (മലയാളം)';
+      case 'bn':
+      case 'bengali':
+        return 'Bengali (বাংলা)';
+      case 'pa':
+      case 'punjabi':
+        return 'Punjabi (ਪੰਜਾਬੀ)';
+      case 'or':
+      case 'odia':
+        return 'Odia (ଓଡ଼ିଆ)';
+      case 'ur':
+      case 'urdu':
+        return 'Urdu (اردو)';
+      default:
+        return lang.toUpperCase();
     }
   }
 
@@ -118,75 +196,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
-  }
-
-  // ==========================================
-  // PROFILE DETAILS EDITING & DIALOGS
-  // ==========================================
-
-  Future<void> _showEditProfileDialog() async {
-    final nameCtrl = TextEditingController(text: _currentUser.fullName);
-    final phoneCtrl = TextEditingController(text: _currentUser.phoneNumber ?? '');
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-          title: Text(
-            'Edit Profile Details',
-            style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A), fontSize: 16),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A)),
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  labelStyle: TextStyle(color: Color(0xFF94A3B8)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A)),
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  labelStyle: TextStyle(color: Color(0xFF94A3B8)),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669)),
-              child: const Text('Save Changes'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == true) {
-      setState(() => _isLoading = true);
-      final ok = await _api.updateProfile(
-        fullName: nameCtrl.text.trim(),
-        phoneNumber: phoneCtrl.text.trim(),
-      );
-      if (ok) {
-        await _fetchLatestProfile();
-      }
-      setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _showForgotPasswordDialog() async {
@@ -384,13 +393,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )
           else
             IconButton(
-              icon: Icon(Icons.edit_outlined, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
-              tooltip: 'Edit Profile',
-              onPressed: _showEditProfileDialog,
+              icon: Icon(Icons.refresh_rounded, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+              tooltip: 'Sync Profile',
+              onPressed: () => _fetchLatestProfile(silent: false),
             ),
         ],
       ),
-      body: ListView(
+      body: RefreshIndicator(
+        color: const Color(0xFF10B981),
+        onRefresh: () => _fetchLatestProfile(silent: false),
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // 1. User Dossier Header Card with Avatar Photo & Camera Badge
@@ -454,8 +466,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Compact User Header with Profile Photo & Camera badge
   Widget _buildUserHeaderCard(Color borderColor, bool isDark) {
@@ -550,7 +563,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Divider(color: dividerColor, height: 16),
           _buildJustifiedRow('Contact Phone', _currentUser.phoneNumber?.isNotEmpty == true ? _currentUser.phoneNumber! : 'Not specified', icon: Icons.phone_outlined, isDark: isDark),
           Divider(color: dividerColor, height: 16),
+          _buildJustifiedRow('Assigned Language', _formatLanguage(_currentUser.language), icon: Icons.language_rounded, isDark: isDark),
+          Divider(color: dividerColor, height: 16),
           _buildJustifiedRow('System Status', 'Active & Synchronized', icon: Icons.check_circle_outline_rounded, valueColor: const Color(0xFF10B981), isDark: isDark),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 14, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Profile details can only be updated via the web app (crm.textorasms.com). Updates sync here automatically in real time.',
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
