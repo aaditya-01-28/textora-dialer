@@ -249,7 +249,7 @@ class TelephonyService {
           callTimestamp: timestampIso,
           remark: 'Captured from SIM dialer',
           recordingUrl: recordingUrl,
-          logSource: 'dialer_connected',
+          logSource: duration > 0 ? 'dialer_connected' : 'dialer_rnr',
           isSynced: activeLeadId != null, // When active lead is present, PostCallDialog handles disposition to prevent duplicate background sync
         );
 

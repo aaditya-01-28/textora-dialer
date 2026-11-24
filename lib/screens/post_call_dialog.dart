@@ -81,9 +81,11 @@ class _PostCallDialogState extends State<PostCallDialog> {
       lastDate: now.add(const Duration(days: 365)),
       helpText: _disposition == 'Demo Scheduled'
           ? 'SELECT DEMO DATE'
-          : _disposition == 'Future Requirement'
-              ? 'SELECT EXPECTED DATE'
-              : 'SELECT CALLBACK DATE',
+          : _disposition == 'Demo Done'
+              ? 'SELECT POST-DEMO CALLBACK DATE'
+              : _disposition == 'Future Requirement'
+                  ? 'SELECT EXPECTED DATE'
+                  : 'SELECT CALLBACK DATE',
     );
 
     if (pickedDate == null || !mounted) return;
@@ -147,7 +149,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
           : 'Already Using Our Service';
     }
 
-    final callbackDatetimeIso = (_disposition == 'Callback' || _disposition == 'Future Requirement') && _scheduledDateTime != null
+    final callbackDatetimeIso = (_disposition == 'Callback' || _disposition == 'Future Requirement' || _disposition == 'Demo Done') && _scheduledDateTime != null
         ? _scheduledDateTime!.toUtc().toIso8601String()
         : null;
 
@@ -363,8 +365,8 @@ class _PostCallDialogState extends State<PostCallDialog> {
                 }).toList(),
               ),
 
-              // Sub-options: Callback / Future Requirement Date & Time (matches Web CRM UI)
-              if (_disposition == 'Callback' || _disposition == 'Future Requirement') ...[
+              // Sub-options: Callback / Future Requirement / Demo Done Date & Time (matches Web CRM UI)
+              if (_disposition == 'Callback' || _disposition == 'Future Requirement' || _disposition == 'Demo Done') ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -389,7 +391,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
                               Text(
                                 _disposition == 'Future Requirement'
                                     ? 'Expected Requirement Date'
-                                    : 'Callback Date & Time',
+                                    : _disposition == 'Demo Done'
+                                        ? 'Post-Demo Follow-Up Date'
+                                        : 'Callback Date & Time',
                                 style: const TextStyle(
                                   color: Color(0xFF1D4ED8),
                                   fontSize: 12,
@@ -401,7 +405,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
                           Text(
                             _disposition == 'Future Requirement'
                                 ? '(Optional expected date)'
-                                : '(Optional if client hasn\'t confirmed)',
+                                : _disposition == 'Demo Done'
+                                    ? '(Optional closing callback)'
+                                    : '(Optional if client hasn\'t confirmed)',
                             style: TextStyle(
                               fontSize: 10,
                               color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),

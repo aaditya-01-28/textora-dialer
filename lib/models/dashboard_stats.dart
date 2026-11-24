@@ -69,6 +69,7 @@ class DashboardStats {
   final int unassignedLeadsCount;
   final int todayCallbacksCount;
   final int todayDemosCount;
+  final int todayDemosDoneCount;
   final int overdueTasksCount;
   final int activeDealsCount;
   final double activePipelineValue;
@@ -97,6 +98,7 @@ class DashboardStats {
     required this.unassignedLeadsCount,
     required this.todayCallbacksCount,
     required this.todayDemosCount,
+    this.todayDemosDoneCount = 0,
     required this.overdueTasksCount,
     required this.activeDealsCount,
     required this.activePipelineValue,
@@ -178,6 +180,7 @@ class DashboardStats {
       unassignedLeadsCount: _parseInt(json['unassignedLeadsCount']),
       todayCallbacksCount: _parseInt(json['todayCallbacksCount']),
       todayDemosCount: _parseInt(json['todayDemosCount']),
+      todayDemosDoneCount: _parseInt(json['todayDemosDoneCount']),
       overdueTasksCount: _parseInt(json['overdueTasksCount']),
       activeDealsCount: _parseInt(json['activeDealsCount']),
       activePipelineValue: _parseDouble(json['activePipelineValue']),

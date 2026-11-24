@@ -34,6 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _selectedUserId;
   List<DashboardTeamMember> _teamMembers = [];
   String _appVersion = 'v1.2.5';
+  Timer? _refreshTimer;
 
   int _unsyncedCallsCount = 0;
   bool _isSyncingOffline = false;
@@ -45,6 +46,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _checkOfflineCalls();
     _startPushToDialCompanion();
     _loadAppVersion();
+
+    // Real-time automatic background refresh every 15 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) {
+        _loadDashboard(silent: true);
+        _checkOfflineCalls();
+      }
+    });
   }
 
   Future<void> _loadAppVersion() async {
@@ -60,6 +69,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _telephony.stopPushToDialListener();
     super.dispose();
   }
@@ -1438,17 +1448,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildAgendaItemTile(AgendaItem item, Color titleColor, Color subColor) {
     final isDemo = item.taskType.toLowerCase().contains('demo');
+    final isCompleted = item.status.toLowerCase() == 'completed';
     return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: isDemo ? const Color(0xFF38BDF8).withValues(alpha: 0.15) : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+            color: isCompleted
+                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                : isDemo
+                ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
+                : const Color(0xFFF59E0B).withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
-            isDemo ? Icons.video_call_rounded : Icons.phone_callback_rounded,
-            color: isDemo ? const Color(0xFF38BDF8) : const Color(0xFFF59E0B),
+            isCompleted
+                ? Icons.check_circle_rounded
+                : isDemo
+                ? Icons.video_call_rounded
+                : Icons.phone_callback_rounded,
+            color: isCompleted
+                ? const Color(0xFF10B981)
+                : isDemo
+                ? const Color(0xFF38BDF8)
+                : const Color(0xFFF59E0B),
             size: 20,
           ),
         ),
@@ -1457,21 +1480,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                item.contactName ?? item.companyName ?? 'Lead Follow-up',
-                style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      item.contactName ?? item.companyName ?? 'Lead Follow-up',
+                      style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isCompleted) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'Demo Done',
+                        style: TextStyle(color: Color(0xFF10B981), fontSize: 9.5, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 2),
               Text(
                 item.phoneNumber ?? item.notes ?? 'Scheduled action',
                 style: TextStyle(color: subColor, fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
+        const SizedBox(width: 8),
         Text(
-          item.scheduledTime.length >= 16 ? item.scheduledTime.substring(11, 16) : item.taskType,
-          style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+          item.scheduledTime.length >= 16
+              ? item.scheduledTime.substring(11, 16)
+              : (item.scheduledTime.isEmpty ? 'Pending' : item.taskType),
+          style: TextStyle(
+            color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF38BDF8),
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
         ),
       ],
     );
