@@ -517,16 +517,37 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/leads/$leadId');
     final headers = await _headers();
 
-    final res = await http.patch(
+    var res = await http.patch(
       url,
       headers: headers,
       body: jsonEncode(payload),
     );
 
     if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        final newHeaders = await _headers();
+        res = await http.patch(
+          url,
+          headers: newHeaders,
+          body: jsonEncode(payload),
+        );
+      }
+    }
+
+    if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
-    return res.statusCode == 200;
+    if (res.statusCode != 200) {
+      try {
+        final body = jsonDecode(res.body);
+        throw Exception(body['error'] ?? 'Server returned status ${res.statusCode}');
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception('Server returned status ${res.statusCode}');
+      }
+    }
+    return true;
   }
 
   /// Fetch Scheduled Agenda & Tasks (Today, Overdue, Upcoming)

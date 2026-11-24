@@ -41,8 +41,8 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
 
   late String _selectedStatus;
   late String _selectedVertical;
-  late String _selectedService;
-  late String _selectedLanguage;
+  List<String> _selectedServices = [];
+  List<String> _selectedLanguages = [];
 
   static const List<String> _statusOptions = [
     'new',
@@ -79,23 +79,34 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
   ];
 
   static const List<String> _serviceOptions = [
-    'Unspecified',
     'WhatsApp API',
-    'SMS Gateway',
+    'Bulk WhatsApp',
+    'Virtual WhatsApp',
+    'Bulk SMS',
     'RCS Messaging',
-    'Voice OTP & OBD',
-    'CRM & Automation Suite',
+    'Transactional SMS',
+    'Promotional SMS',
+    'Voice SMS / OBD',
+    'OTP API',
+    'DLT & SMS Gateway',
+    'Combo WA+SMS',
+    'Reseller',
   ];
 
   static const List<String> _languageOptions = [
     'English',
     'Hindi',
-    'Hinglish',
-    'Marathi',
-    'Gujarati',
     'Tamil',
     'Telugu',
+    'Kannada',
+    'Malayalam',
+    'Marathi',
+    'Gujarati',
     'Bengali',
+    'Punjabi',
+    'Odia',
+    'Assamese',
+    'Urdu',
   ];
 
   @override
@@ -121,13 +132,27 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
         ? _currentLead.businessVertical!
         : 'Unspecified';
 
-    _selectedService = _serviceOptions.contains(_currentLead.serviceType)
-        ? _currentLead.serviceType!
-        : 'Unspecified';
+    final rawService = _currentLead.serviceType ?? '';
+    if (rawService.isNotEmpty && rawService.toLowerCase() != 'unspecified') {
+      _selectedServices = rawService
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty && s.toLowerCase() != 'unspecified')
+          .toList();
+    } else {
+      _selectedServices = [];
+    }
 
-    _selectedLanguage = _languageOptions.contains(_currentLead.preferredLanguage)
-        ? _currentLead.preferredLanguage!
-        : 'English';
+    final rawLang = _currentLead.preferredLanguage ?? '';
+    if (rawLang.isNotEmpty) {
+      _selectedLanguages = rawLang
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } else {
+      _selectedLanguages = [];
+    }
   }
 
   @override
@@ -145,10 +170,14 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
       final details = await _api.getLeadDetails(_currentLead.id);
       if (details.isNotEmpty && mounted) {
         final logs = (details['callLogs'] as List?)?.map((e) => e as Map<String, dynamic>).toList() ?? [];
+        final fetchedLead = LeadItem.fromJson(details);
         setState(() {
-          _currentLead = LeadItem.fromJson(details);
+          _currentLead = fetchedLead;
           _callLogs = logs;
           _isLoadingHistory = false;
+          if (!_isEditing) {
+            _initControllers();
+          }
         });
       }
     } catch (_) {
@@ -164,6 +193,8 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     final cleanPhone = _phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
     final cleanWebsite = _websiteController.text.trim();
     final cleanAddress = _addressController.text.trim();
+    final cleanServices = _selectedServices.join(', ');
+    final cleanLanguages = _selectedLanguages.join(', ');
 
     final payload = <String, dynamic>{
       'contactName': cleanName.isNotEmpty ? cleanName : null,
@@ -171,9 +202,9 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
       'phoneNumber': cleanPhone.isNotEmpty ? cleanPhone : _currentLead.phoneNumber,
       'websiteUrl': cleanWebsite.isNotEmpty ? cleanWebsite : null,
       'businessVertical': _selectedVertical != 'Unspecified' ? _selectedVertical : null,
-      'serviceType': _selectedService != 'Unspecified' ? _selectedService : null,
+      'serviceType': cleanServices.isNotEmpty ? cleanServices : null,
       'status': _selectedStatus,
-      'preferredLanguage': _selectedLanguage,
+      'preferredLanguage': cleanLanguages.isNotEmpty ? cleanLanguages : null,
       'address': cleanAddress.isNotEmpty ? cleanAddress : null,
     };
 
@@ -186,9 +217,9 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
           phoneNumber: cleanPhone.isNotEmpty ? cleanPhone : _currentLead.phoneNumber,
           websiteUrl: cleanWebsite.isNotEmpty ? cleanWebsite : null,
           businessVertical: _selectedVertical != 'Unspecified' ? _selectedVertical : null,
-          serviceType: _selectedService != 'Unspecified' ? _selectedService : null,
+          serviceType: cleanServices.isNotEmpty ? cleanServices : null,
           status: _selectedStatus,
-          preferredLanguage: _selectedLanguage,
+          preferredLanguage: cleanLanguages.isNotEmpty ? cleanLanguages : null,
           address: cleanAddress.isNotEmpty ? cleanAddress : null,
         );
 
@@ -556,9 +587,23 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
           Divider(color: dividerColor, height: 16),
           _buildInfoRow('Industry Vertical', _currentLead.businessVertical ?? 'Unspecified', titleColor, subColor),
           Divider(color: dividerColor, height: 16),
-          _buildInfoRow('Service Interest', _currentLead.serviceType ?? 'Unspecified', titleColor, subColor),
+          _buildInfoRow(
+            'Service Interest',
+            (_currentLead.serviceType != null && _currentLead.serviceType!.trim().isNotEmpty && _currentLead.serviceType != 'Unspecified')
+                ? _currentLead.serviceType!
+                : 'Unspecified',
+            titleColor,
+            subColor,
+          ),
           Divider(color: dividerColor, height: 16),
-          _buildInfoRow('Preferred Language', _currentLead.preferredLanguage ?? 'English', titleColor, subColor),
+          _buildInfoRow(
+            'Preferred Language',
+            (_currentLead.preferredLanguage != null && _currentLead.preferredLanguage!.trim().isNotEmpty)
+                ? _currentLead.preferredLanguage!
+                : 'English',
+            titleColor,
+            subColor,
+          ),
           Divider(color: dividerColor, height: 16),
           _buildInfoRow('Website URL', _currentLead.websiteUrl ?? 'None', titleColor, subColor),
           Divider(color: dividerColor, height: 16),
@@ -648,24 +693,26 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             onChanged: (val) => setState(() => _selectedVertical = val!),
           ),
           const SizedBox(height: 12),
-          _buildDropdown(
-            label: 'Service Interest',
-            value: _selectedService,
-            items: _serviceOptions,
+          _buildMultiSelectField(
+            label: 'Interested Services (Multi-Select)',
+            selectedItems: _selectedServices,
+            allItems: _serviceOptions,
+            primaryColor: const Color(0xFF10B981),
             isDark: isDark,
             titleColor: titleColor,
             subColor: subColor,
-            onChanged: (val) => setState(() => _selectedService = val!),
+            onChanged: (newList) => setState(() => _selectedServices = newList),
           ),
           const SizedBox(height: 12),
-          _buildDropdown(
-            label: 'Preferred Language',
-            value: _selectedLanguage,
-            items: _languageOptions,
+          _buildMultiSelectField(
+            label: 'Preferred Languages (Multi-Select)',
+            selectedItems: _selectedLanguages,
+            allItems: _languageOptions,
+            primaryColor: const Color(0xFF6366F1),
             isDark: isDark,
             titleColor: titleColor,
             subColor: subColor,
-            onChanged: (val) => setState(() => _selectedLanguage = val!),
+            onChanged: (newList) => setState(() => _selectedLanguages = newList),
           ),
           const SizedBox(height: 12),
           _buildTextField('Website URL', _websiteController, 'https://example.com', isDark, titleColor, subColor),
@@ -771,6 +818,236 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMultiSelectField({
+    required String label,
+    required List<String> selectedItems,
+    required List<String> allItems,
+    required Color primaryColor,
+    required bool isDark,
+    required Color titleColor,
+    required Color subColor,
+    required ValueChanged<List<String>> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(
+              '${selectedItems.length} selected',
+              style: TextStyle(color: subColor, fontSize: 10),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (selectedItems.isNotEmpty)
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: selectedItems.map((item) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: primaryColor.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : primaryColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () {
+                              final updated = List<String>.from(selectedItems)..remove(item);
+                              onChanged(updated);
+                            },
+                            child: Icon(Icons.close, size: 14, color: primaryColor),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'None selected',
+                    style: TextStyle(color: subColor, fontSize: 12, fontStyle: FontStyle.italic),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => _openMultiSelectPicker(
+                  label: label,
+                  selectedItems: selectedItems,
+                  allItems: allItems,
+                  primaryColor: primaryColor,
+                  isDark: isDark,
+                  onChanged: onChanged,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_circle_outline, size: 14, color: primaryColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        '+ Select / Modify',
+                        style: TextStyle(color: primaryColor, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openMultiSelectPicker({
+    required String label,
+    required List<String> selectedItems,
+    required List<String> allItems,
+    required Color primaryColor,
+    required bool isDark,
+    required ValueChanged<List<String>> onChanged,
+  }) {
+    final tempSelected = List<String>.from(selectedItems);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final modalBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+            final txtColor = isDark ? Colors.white : const Color(0xFF0F172A);
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
+              ),
+              decoration: BoxDecoration(
+                color: modalBg,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(color: txtColor, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: allItems.length,
+                      itemBuilder: (context, idx) {
+                        final item = allItems[idx];
+                        final isChecked = tempSelected.contains(item);
+                        return CheckboxListTile(
+                          value: isChecked,
+                          title: Text(
+                            item,
+                            style: TextStyle(
+                              color: txtColor,
+                              fontSize: 13,
+                              fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          activeColor: primaryColor,
+                          checkColor: Colors.white,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          onChanged: (bool? val) {
+                            setModalState(() {
+                              if (val == true) {
+                                if (!tempSelected.contains(item)) tempSelected.add(item);
+                              } else {
+                                tempSelected.remove(item);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      onChanged(tempSelected);
+                      Navigator.of(ctx).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Apply Selection', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
