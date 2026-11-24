@@ -59,9 +59,11 @@ class UpdateService {
     try {
       final baseUrl = await _storage.getBaseUrl();
       final url = Uri.parse('$baseUrl/api/app/version');
+      final token = await _storage.getToken();
 
       final res = await http.get(url, headers: {
         'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       }).timeout(const Duration(seconds: 10));
 
       if (res.statusCode != 200) {
