@@ -62,6 +62,8 @@ class DashboardStats {
   final int connectedCalls;
   final int connectRate;
   final int talkTimeMins;
+  final int totalDurationSeconds;
+  final String? talkTimeFormatted;
   final Map<String, int> dispositionMap;
   final int queueRemainingCount;
   final int unassignedLeadsCount;
@@ -88,6 +90,8 @@ class DashboardStats {
     required this.connectedCalls,
     required this.connectRate,
     required this.talkTimeMins,
+    this.totalDurationSeconds = 0,
+    this.talkTimeFormatted,
     required this.dispositionMap,
     required this.queueRemainingCount,
     required this.unassignedLeadsCount,
@@ -167,6 +171,8 @@ class DashboardStats {
       connectedCalls: _parseInt(json['connectedCalls']),
       connectRate: _parseInt(json['connectRate']),
       talkTimeMins: _parseInt(json['talkTimeMins']),
+      totalDurationSeconds: _parseInt(json['totalDurationSeconds']),
+      talkTimeFormatted: json['talkTimeFormatted']?.toString(),
       dispositionMap: dispMap,
       queueRemainingCount: _parseInt(json['queueRemainingCount']),
       unassignedLeadsCount: _parseInt(json['unassignedLeadsCount']),
@@ -187,6 +193,27 @@ class DashboardStats {
       dateFrom: dateFrom,
       dateTo: dateTo,
     );
+  }
+
+  /// Exact human-readable talk time duration (e.g. 0m 22s, 2m 14s, 1h 05m 12s)
+  String get displayTalkTime {
+    if (talkTimeFormatted != null && talkTimeFormatted!.isNotEmpty) {
+      return talkTimeFormatted!;
+    }
+    final secs = totalDurationSeconds;
+    if (secs > 0) {
+      final hours = secs ~/ 3600;
+      final minutes = (secs % 3600) ~/ 60;
+      final remainingSecs = secs % 60;
+      if (hours > 0) {
+        return '${hours}h ${minutes}m ${remainingSecs}s';
+      }
+      return '${minutes}m ${remainingSecs}s';
+    }
+    if (talkTimeMins > 0) {
+      return '${talkTimeMins}m 00s';
+    }
+    return '0m 00s';
   }
 
   factory DashboardStats.empty() {

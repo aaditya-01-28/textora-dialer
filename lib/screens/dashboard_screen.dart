@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/dashboard_stats.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
@@ -32,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTimeRange? _customDateRange;
   String? _selectedUserId;
   List<DashboardTeamMember> _teamMembers = [];
+  String _appVersion = 'v1.2.5';
 
   int _unsyncedCallsCount = 0;
   bool _isSyncingOffline = false;
@@ -42,6 +44,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadDashboard();
     _checkOfflineCalls();
     _startPushToDialCompanion();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${info.version}';
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -299,9 +313,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: const Color(0xFF10B981).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
-                    'v1.1.0',
-                    style: TextStyle(
+                  child: Text(
+                    _appVersion,
+                    style: const TextStyle(
                       fontSize: 10,
                       color: Color(0xFF10B981),
                       fontWeight: FontWeight.w700,
@@ -926,9 +940,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         _buildMetricCard(
           title: 'Total Talk Time',
-          value: '${stats.talkTimeMins}m',
-          subtitle: stats.talkTimeMins >= 60
-              ? '${(stats.talkTimeMins / 60).toStringAsFixed(1)} hours'
+          value: stats.displayTalkTime,
+          subtitle: stats.totalDurationSeconds >= 3600 || stats.talkTimeMins >= 60
+              ? '${(stats.totalDurationSeconds > 0 ? (stats.totalDurationSeconds / 3600).toStringAsFixed(1) : (stats.talkTimeMins / 60).toStringAsFixed(1))} hours'
               : 'Direct SIM talk time',
           icon: Icons.access_time_filled_rounded,
           iconColor: const Color(0xFFA855F7),
