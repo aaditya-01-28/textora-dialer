@@ -178,10 +178,14 @@ class TelephonyService {
     if (!hasPerms) return null;
 
     try {
-      // Query recent calls from the last 15 minutes
-      final lookbackEpoch = DateTime.now().subtract(const Duration(minutes: 15)).millisecondsSinceEpoch;
+      // Lookback from when call was initiated (with 5 second buffer for OS clock drift),
+      // or at most 5 minutes if initiated time was not set.
+      final startTimeEpoch = (callInitiatedTime != null)
+          ? callInitiatedTime!.subtract(const Duration(seconds: 5)).millisecondsSinceEpoch
+          : DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch;
+
       final Iterable<CallLogEntry> entries = await CallLog.query(
-        dateFrom: lookbackEpoch,
+        dateFrom: startTimeEpoch,
       );
 
       CallLogEntry? matchedEntry;
@@ -191,22 +195,38 @@ class TelephonyService {
       final targetSuffix = cleanTarget.length >= 10 ? cleanTarget.substring(cleanTarget.length - 10) : cleanTarget;
 
       for (var entry in entries) {
+        // Strict Check 1: Must be an outgoing call! (skip incoming, missed, blocked, rejected)
+        if (entry.callType != null && entry.callType != CallType.outgoing) {
+          continue;
+        }
+
+        // Strict Check 2: Must have taken place after the user tapped Call SIM in the app
+        if (entry.timestamp != null && entry.timestamp! < startTimeEpoch) {
+          continue;
+        }
+
+        // Strict Check 3: Number must match the dialed lead number
         final number = (entry.number ?? '').replaceAll(RegExp(r'\D'), '');
-        if (number.endsWith(targetSuffix)) {
+        if (number.isNotEmpty && (number.endsWith(targetSuffix) || targetSuffix.endsWith(number))) {
           matchedEntry = entry;
           break;
         }
       }
 
-      // If exact number not matched, take the latest outgoing entry
-      matchedEntry ??= entries.isNotEmpty ? entries.first : null;
+      // DO NOT fallback to entries.first!
+      // If no outgoing call was placed to this target number, matchedEntry is null.
+      // Returning null ensures no ghost call is recorded and no false disposition popup appears.
+      if (matchedEntry == null) {
+        return null;
+      }
 
-      if (matchedEntry != null) {
-        final duration = matchedEntry.duration ?? 0;
-        final timestampEpoch = matchedEntry.timestamp ?? DateTime.now().millisecondsSinceEpoch;
-        // Use isUtc: true so ISO string ends with 'Z' and is parsed correctly without timezone distortion
-        final timestampIso = DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
-        final disposition = duration > 0 ? 'Connected' : 'RNR';
+      final duration = (matchedEntry.duration != null && matchedEntry.duration! > 0)
+          ? matchedEntry.duration!
+          : 0;
+      final timestampEpoch = matchedEntry.timestamp ?? DateTime.now().millisecondsSinceEpoch;
+      // Use isUtc: true so ISO string ends with 'Z' and is parsed correctly without timezone distortion
+      final timestampIso = DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
+      final disposition = duration > 0 ? 'Connected' : 'RNR';
 
         // Check for newly recorded audio file from native recorder
         String? recordingUrl;
@@ -243,7 +263,6 @@ class TelephonyService {
         }
 
         return item;
-      }
     } catch (e) {
       // Android permission or provider error
     }

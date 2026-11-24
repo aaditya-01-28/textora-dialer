@@ -148,7 +148,7 @@ class _HomeShellState extends State<HomeShell> {
         onNavigateToLeads: () => setState(() => _currentIndex = 1),
       ),
       LeadsScreen(user: _currentUser),
-      const CallHistoryScreen(),
+      CallHistoryScreen(user: _currentUser),
       ProfileScreen(
         user: _currentUser,
         onProfileUpdated: _onProfileUpdated,

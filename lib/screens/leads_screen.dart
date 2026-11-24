@@ -179,16 +179,11 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
     if (!mounted) return;
 
-    final finalRecord = callRecord ??
-        CallSyncItem(
-          id: 'manual_${DateTime.now().millisecondsSinceEpoch}',
-          leadId: lead.id,
-          phoneNumber: lead.phoneNumber,
-          callTimestamp: DateTime.now().toUtc().toIso8601String(),
-          durationSeconds: 0,
-          disposition: 'Connected',
-          isSynced: true,
-        );
+    // If no outgoing call was placed to this lead (user backed out of native dialer),
+    // do NOT pop up the disposition dialog or log any fake/waiting time.
+    if (callRecord == null) {
+      return;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -198,7 +193,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
       backgroundColor: Colors.transparent,
       builder: (_) => PostCallDialog(
         lead: lead,
-        call: finalRecord,
+        call: callRecord,
         onSaved: () => _loadLeads(silent: false),
       ),
     );

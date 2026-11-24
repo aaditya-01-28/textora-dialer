@@ -193,6 +193,46 @@ class ApiService {
     }
   }
 
+  /// Fetch Call Logs from CRM Backend (with optional dateFrom, dateTo, search)
+  Future<List<CallSyncItem>> getCallLogs({
+    String? dateFrom,
+    String? dateTo,
+    String? search,
+    int limit = 100,
+  }) async {
+    final baseUrl = await _storage.getBaseUrl();
+    final queryParams = <String, String>{
+      'limit': limit.toString(),
+      if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+      if (search != null && search.isNotEmpty) 'search': search,
+    };
+    final uri = Uri.parse('$baseUrl/api/calls').replace(queryParameters: queryParams);
+    final headers = await _headers();
+
+    try {
+      var res = await http.get(uri, headers: headers);
+      if (res.statusCode == 401) {
+        final refreshed = await refreshToken();
+        if (refreshed) {
+          final newHeaders = await _headers();
+          res = await http.get(uri, headers: newHeaders);
+        }
+      }
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final list = (data['calls'] as List?) ?? [];
+        return list.map((json) {
+          final item = CallSyncItem.fromJson(json);
+          item.isSynced = true;
+          return item;
+        }).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
   /// Upload Native Call Recording Audio File to CRM Storage
   Future<String?> uploadRecordingFile(String filePath, {String? leadId, String? callLogId}) async {
     final baseUrl = await _storage.getBaseUrl();

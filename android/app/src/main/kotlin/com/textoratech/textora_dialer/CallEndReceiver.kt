@@ -55,8 +55,8 @@ class CallEndReceiver : BroadcastReceiver() {
                     .putBoolean("crm_call_was_offhook", false)
                     .apply()
 
-                // Trigger auto-open and status update notification only for the CRM call that just concluded
-                if (wasOffhook || elapsed < 5 * 60 * 1000L) {
+                // Trigger auto-open and status update notification only if the call was actually placed (went offhook)
+                if (wasOffhook) {
                     onCallEnded(context, phone)
                 }
             }
