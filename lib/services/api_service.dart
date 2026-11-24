@@ -95,7 +95,7 @@ class ApiService {
     final baseUrl = await _storage.getBaseUrl();
     final queryParams = <String, String>{
       'page': page.toString(),
-      'limit': '500',
+      'limit': '10000',
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (status != null && status != 'all') 'status': status,
     };
