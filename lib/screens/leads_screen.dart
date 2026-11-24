@@ -634,6 +634,27 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (lead.formattedAssignedAt != null) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 11,
+                                color: const Color(0xFF10B981),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Assigned: ${lead.formattedAssignedAt}',
+                                style: TextStyle(
+                                  color: subtitleColor,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),

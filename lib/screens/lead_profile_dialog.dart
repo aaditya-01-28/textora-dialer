@@ -563,6 +563,14 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
           _buildInfoRow('Website URL', _currentLead.websiteUrl ?? 'None', titleColor, subColor),
           Divider(color: dividerColor, height: 16),
           _buildInfoRow('Lead Source', _currentLead.source, titleColor, subColor),
+          if (_currentLead.formattedAssignedAt != null) ...[
+            Divider(color: dividerColor, height: 16),
+            _buildInfoRow('Assigned On', _currentLead.formattedAssignedAt!, titleColor, subColor),
+          ],
+          if (_currentLead.assignedRepName != null && _currentLead.assignedRepName!.isNotEmpty) ...[
+            Divider(color: dividerColor, height: 16),
+            _buildInfoRow('Assigned Rep', _currentLead.assignedRepName!, titleColor, subColor),
+          ],
           if (_currentLead.address != null && _currentLead.address!.isNotEmpty) ...[
             Divider(color: dividerColor, height: 16),
             _buildInfoRow('Address', _currentLead.address!, titleColor, subColor),

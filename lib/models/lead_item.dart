@@ -13,6 +13,7 @@ class LeadItem {
   final String? address;
   final String? createdAt;
   final String? updatedAt;
+  final String? assignedAt;
   final String? assignedRepName;
   final int callLogsCount;
 
@@ -32,6 +33,7 @@ class LeadItem {
     this.address,
     this.createdAt,
     this.updatedAt,
+    this.assignedAt,
     this.assignedRepName,
   });
 
@@ -59,6 +61,7 @@ class LeadItem {
       address: json['address']?.toString() ?? customMeta?['address']?.toString(),
       createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString(),
+      assignedAt: json['assignedAt']?.toString() ?? json['assigned_at']?.toString() ?? json['firstAssignedAt']?.toString() ?? json['createdAt']?.toString(),
       assignedRepName: assignedRep?['fullName']?.toString() ?? json['assignedRepName']?.toString(),
     );
   }
@@ -79,6 +82,7 @@ class LeadItem {
       'address': address,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
+      'assignedAt': assignedAt,
     };
   }
 
@@ -98,6 +102,7 @@ class LeadItem {
     String? address,
     String? createdAt,
     String? updatedAt,
+    String? assignedAt,
     String? assignedRepName,
   }) {
     return LeadItem(
@@ -116,8 +121,25 @@ class LeadItem {
       address: address ?? this.address,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      assignedAt: assignedAt ?? this.assignedAt,
       assignedRepName: assignedRepName ?? this.assignedRepName,
     );
+  }
+
+  /// Clean formatted assignment timestamp for reps
+  String? get formattedAssignedAt {
+    if (assignedAt == null || assignedAt!.isEmpty) return null;
+    try {
+      final dt = DateTime.parse(assignedAt!).toLocal();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final month = months[dt.month - 1];
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour >= 12 ? 'pm' : 'am';
+      return '${dt.day} $month, $hour:$minute $ampm';
+    } catch (_) {
+      return assignedAt;
+    }
   }
 
   /// Clean display title: Avoids showing raw phone number twice!
