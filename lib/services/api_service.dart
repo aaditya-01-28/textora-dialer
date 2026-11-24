@@ -269,6 +269,8 @@ class ApiService {
     String? demoDatetime,
     String? decisionMakerName,
     String? meetingLink,
+    String? callTimestamp,
+    String? callLogId,
   }) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/dispose');
@@ -284,6 +286,8 @@ class ApiService {
     if (demoDatetime != null) payload['demoDatetime'] = demoDatetime;
     if (decisionMakerName != null) payload['decisionMakerName'] = decisionMakerName;
     if (meetingLink != null) payload['meetingLink'] = meetingLink;
+    if (callTimestamp != null) payload['callTimestamp'] = callTimestamp;
+    if (callLogId != null) payload['callLogId'] = callLogId;
 
     try {
       var res = await http.patch(

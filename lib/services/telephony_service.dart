@@ -230,6 +230,7 @@ class TelephonyService {
           remark: 'Captured from SIM dialer',
           recordingUrl: recordingUrl,
           logSource: 'dialer_connected',
+          isSynced: activeLeadId != null, // When active lead is present, PostCallDialog handles disposition to prevent duplicate background sync
         );
 
         // Store locally

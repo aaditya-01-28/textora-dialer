@@ -187,6 +187,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
           callTimestamp: DateTime.now().toUtc().toIso8601String(),
           durationSeconds: 0,
           disposition: 'Connected',
+          isSynced: true,
         );
 
     showModalBottomSheet(

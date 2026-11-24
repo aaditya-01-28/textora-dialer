@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 class PostCallDialog extends StatefulWidget {
   final LeadItem lead;
@@ -164,10 +165,13 @@ class _PostCallDialogState extends State<PostCallDialog> {
       demoDatetime: demoDatetimeIso,
       decisionMakerName: decisionMakerName,
       meetingLink: meetingLink,
+      callTimestamp: widget.call.callTimestamp,
+      callLogId: widget.call.id,
     );
 
     if (!mounted) return;
     if (success) {
+      await StorageService().updateCallRecordSyncStatus(widget.call.id, true);
       widget.onSaved();
       Navigator.of(context).pop();
     } else {
