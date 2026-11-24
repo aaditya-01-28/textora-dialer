@@ -50,7 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) {
         setState(() {
-          _appVersion = 'v${info.version}';
+          _appVersion = 'v${info.version} (Build ${info.buildNumber})';
         });
       }
     } catch (_) {}

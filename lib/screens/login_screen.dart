@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/api_service.dart';
 import 'home_shell.dart';
 
@@ -18,6 +19,24 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  String _appVersion = 'v1.2.1';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${info.version} (Build ${info.buildNumber})';
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -490,10 +509,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 18),
 
                 // Version Identifier
-                const Center(
+                Center(
                   child: Text(
-                    'Textora Companion v1.1.0',
-                    style: TextStyle(
+                    'Textora Companion $_appVersion',
+                    style: const TextStyle(
                       color: Color(0xFF64748B),
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
