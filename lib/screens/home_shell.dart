@@ -11,6 +11,7 @@ import '../services/telephony_service.dart';
 import '../services/update_service.dart';
 import 'dashboard_screen.dart';
 import 'leads_screen.dart';
+import 'agenda_screen.dart';
 import 'call_history_screen.dart';
 import 'profile_screen.dart';
 import 'post_call_dialog.dart';
@@ -128,6 +129,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   void _startAgendaReminders() {
     AgendaReminderService().startListening(
+      onOpenAgenda: () {
+        if (mounted) {
+          setState(() => _currentIndex = 2);
+        }
+      },
       onReminder: (task, type) {
         if (!mounted) return;
         final lead = task['lead'] as Map<String, dynamic>? ?? {};
@@ -225,8 +231,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       DashboardScreen(
         user: _currentUser,
         onNavigateToLeads: () => setState(() => _currentIndex = 1),
+        onNavigateToAgenda: () => setState(() => _currentIndex = 2),
       ),
       LeadsScreen(user: _currentUser),
+      AgendaScreen(user: _currentUser),
       CallHistoryScreen(user: _currentUser),
       ProfileScreen(
         user: _currentUser,
@@ -244,51 +252,95 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           color: navBg,
           border: Border(top: BorderSide(color: navBorder, width: 1)),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() => _currentIndex = index);
-            if (index == 3) {
-              _refreshProfile();
-            }
+        child: ValueListenableBuilder<int>(
+          valueListenable: AgendaReminderService().pendingCountNotifier,
+          builder: (context, pendingCount, _) {
+            return BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() => _currentIndex = index);
+                if (index == 2) {
+                  AgendaReminderService().refreshNow();
+                } else if (index == 4) {
+                  _refreshProfile();
+                }
+              },
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              selectedItemColor: selected,
+              unselectedItemColor: unselected,
+              selectedFontSize: 11.5,
+              unselectedFontSize: 10.5,
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
+              type: BottomNavigationBarType.fixed,
+              items: [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.dashboard_outlined),
+                  activeIcon: Icon(Icons.dashboard_rounded),
+                  label: 'Dashboard',
+                  tooltip: 'Sales Dashboard',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.contacts_outlined),
+                  activeIcon: Icon(Icons.contacts_rounded),
+                  label: 'Leads',
+                  tooltip: 'Calling Leads Queue',
+                ),
+                BottomNavigationBarItem(
+                  icon: _buildBadgeIcon(Icons.event_note_outlined, pendingCount),
+                  activeIcon: _buildBadgeIcon(Icons.event_note_rounded, pendingCount),
+                  label: 'Agenda',
+                  tooltip: 'Follow-Up Agenda & Reminders',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.phone_callback_outlined),
+                  activeIcon: Icon(Icons.phone_callback_rounded),
+                  label: 'Calls',
+                  tooltip: 'Carrier Call Records',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.person_outline_rounded),
+                  activeIcon: Icon(Icons.person_rounded),
+                  label: 'Profile',
+                  tooltip: 'User Level & Accessibility',
+                ),
+              ],
+            );
           },
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          selectedItemColor: selected,
-          unselectedItemColor: unselected,
-          selectedFontSize: 12,
-          unselectedFontSize: 11,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard',
-              tooltip: 'Sales Dashboard',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.contacts_outlined),
-              activeIcon: Icon(Icons.contacts_rounded),
-              label: 'Leads',
-              tooltip: 'Calling Leads Queue',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.phone_callback_outlined),
-              activeIcon: Icon(Icons.phone_callback_rounded),
-              label: 'Calls',
-              tooltip: 'Carrier Call Records',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
-              label: 'Profile',
-              tooltip: 'User Level & Accessibility',
-            ),
-          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBadgeIcon(IconData icon, int count) {
+    if (count <= 0) return Icon(icon);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          right: -7,
+          top: -4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.redAccent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 14),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

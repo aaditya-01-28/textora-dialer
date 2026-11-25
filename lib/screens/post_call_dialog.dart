@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
+import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 
@@ -193,6 +194,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
     if (!mounted) return;
     if (success) {
       await StorageService().updateCallRecordSyncStatus(widget.call.id, true);
+      AgendaReminderService().refreshNow();
       widget.onSaved();
       Navigator.of(context).pop();
     } else {

@@ -593,6 +593,37 @@ class ApiService {
 
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
+
+  /// Update an Agenda Task (mark completed, RNR, reschedule, etc.)
+  Future<bool> updateAgendaTask(String taskId, Map<String, dynamic> payload) async {
+    final baseUrl = await _storage.getBaseUrl();
+    final url = Uri.parse('$baseUrl/api/tasks/$taskId');
+    final headers = await _headers();
+
+    try {
+      var res = await http.patch(
+        url,
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+
+      if (res.statusCode == 401) {
+        final refreshed = await refreshToken();
+        if (refreshed) {
+          final retryHeaders = await _headers();
+          res = await http.patch(
+            url,
+            headers: retryHeaders,
+            body: jsonEncode(payload),
+          );
+        }
+      }
+
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 

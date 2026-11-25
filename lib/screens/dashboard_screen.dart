@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/dashboard_stats.dart';
 import '../models/user_profile.dart';
+import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
@@ -10,11 +11,13 @@ import '../services/telephony_service.dart';
 class DashboardScreen extends StatefulWidget {
   final UserProfile user;
   final VoidCallback onNavigateToLeads;
+  final VoidCallback? onNavigateToAgenda;
 
   const DashboardScreen({
     super.key,
     required this.user,
     required this.onNavigateToLeads,
+    this.onNavigateToAgenda,
   });
 
   @override
@@ -345,6 +348,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
+          if (widget.onNavigateToAgenda != null)
+            ValueListenableBuilder<int>(
+              valueListenable: AgendaReminderService().pendingCountNotifier,
+              builder: (context, pendingCount, _) {
+                return IconButton(
+                  tooltip: 'Agenda & Reminders',
+                  onPressed: widget.onNavigateToAgenda,
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        pendingCount > 0
+                            ? Icons.notifications_active_rounded
+                            : Icons.notifications_none_rounded,
+                        color: pendingCount > 0
+                            ? const Color(0xFFF59E0B)
+                            : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                      ),
+                      if (pendingCount > 0)
+                        Positioned(
+                          right: -5,
+                          top: -4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 14),
+                            child: Text(
+                              pendingCount > 99 ? '99+' : '$pendingCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: _isLoading
                 ? const SizedBox(

@@ -15,11 +15,26 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.textoratech.textora_dialer/telephony"
     private val AGENDA_CHANNEL_ID = "textora_agenda_channel"
+    private var methodChannel: MethodChannel? = null
+    private var pendingOpenAgenda: Boolean = false
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_agenda", false)) {
+            pendingOpenAgenda = true
+            methodChannel?.invokeMethod("openAgenda", null)
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        if (intent?.getBooleanExtra("open_agenda", false) == true) {
+            pendingOpenAgenda = true
+        }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        methodChannel?.setMethodCallHandler { call, result ->
             val prefs = getSharedPreferences("TextoraDialerPrefs", Context.MODE_PRIVATE)
             when (call.method) {
                 "setCallInitiated" -> {
@@ -61,6 +76,11 @@ class MainActivity : FlutterActivity() {
 
                     showAgendaNotification(notificationId, title, body, phone, meetingLink, leadId)
                     result.success(true)
+                }
+                "consumeOpenAgendaIntent" -> {
+                    val shouldOpen = pendingOpenAgenda
+                    pendingOpenAgenda = false
+                    result.success(shouldOpen)
                 }
                 else -> result.notImplemented()
             }
