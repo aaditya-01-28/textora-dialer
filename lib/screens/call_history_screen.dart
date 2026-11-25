@@ -708,7 +708,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${call.disposition} • Talk Time: ${_formatDuration(call.durationSeconds)}',
+                                            '${call.isInterested && call.disposition != 'Interested' ? '🔥 Interested • ' : ''}${call.disposition} • Talk Time: ${_formatDuration(call.durationSeconds)}',
                                             style: TextStyle(color: subColor, fontSize: 12),
                                           ),
                                           if (call.remark != null && call.remark!.isNotEmpty) ...[

@@ -11,6 +11,7 @@ class CallSyncItem {
   final String? leadContactName;
   final String? leadCompanyName;
   final String? leadStatus;
+  final bool isInterested;
   bool isSynced;
 
   CallSyncItem({
@@ -26,6 +27,7 @@ class CallSyncItem {
     this.leadContactName,
     this.leadCompanyName,
     this.leadStatus,
+    this.isInterested = false,
     this.isSynced = false,
   });
 
@@ -44,6 +46,7 @@ class CallSyncItem {
       leadContactName: leadMap?['contactName']?.toString() ?? json['leadContactName']?.toString(),
       leadCompanyName: leadMap?['companyName']?.toString() ?? json['leadCompanyName']?.toString(),
       leadStatus: leadMap?['status']?.toString() ?? json['leadStatus']?.toString(),
+      isInterested: json['isInterested'] == true,
       isSynced: json['isSynced'] ?? false,
     );
   }
@@ -62,6 +65,7 @@ class CallSyncItem {
       if (leadContactName != null) 'leadContactName': leadContactName,
       if (leadCompanyName != null) 'leadCompanyName': leadCompanyName,
       if (leadStatus != null) 'leadStatus': leadStatus,
+      'isInterested': isInterested,
       'isSynced': isSynced,
     };
   }

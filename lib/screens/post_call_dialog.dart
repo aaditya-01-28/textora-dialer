@@ -27,6 +27,7 @@ class PostCallDialog extends StatefulWidget {
 
 class _PostCallDialogState extends State<PostCallDialog> {
   late String _disposition;
+  bool _isInterested = false;
   String _serviceOwner = 'our'; // 'our' or 'other'
   final _remarkController = TextEditingController();
   final _decisionMakerController = TextEditingController();
@@ -35,6 +36,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
   bool _isSaving = false;
 
   final List<String> _dispositions = [
+    'Interested',
     'Connected',
     'Callback',
     'Demo Scheduled',
@@ -189,6 +191,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
       callTimestamp: widget.call.callTimestamp,
       callLogId: widget.call.id,
       logSource: widget.isInbound ? 'inbound_sim' : 'apk_manual',
+      isInterested: _isInterested || _disposition == 'Interested',
     );
 
     if (!mounted) return;
@@ -381,14 +384,18 @@ class _PostCallDialogState extends State<PostCallDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: _dispositions.map((d) {
-                  final isSelected = _disposition == d;
-                  String labelText = d;
+                  final isSelected = d == 'Interested'
+                      ? (_isInterested || _disposition == 'Interested')
+                      : (_disposition == d);
+                  String labelText = d == 'Interested' ? '🔥 Interested' : d;
                   if (d == 'Already Using' && isSelected) {
                     labelText = _serviceOwner == 'other'
                         ? 'Already Using (Other)'
                         : 'Already Using (Our)';
                   }
-                  final chipSelectedColor = (d == 'Already Using' && _serviceOwner == 'other')
+                  final chipSelectedColor = (d == 'Interested')
+                      ? const Color(0xFFEA580C)
+                      : (d == 'Already Using' && _serviceOwner == 'other')
                       ? const Color(0xFFEA580C)
                       : (d == 'Demo Scheduled')
                           ? const Color(0xFF9333EA)
@@ -397,7 +404,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
                               : (d == 'Future Requirement')
                                   ? const Color(0xFF0284C7)
                                   : const Color(0xFF059669);
-                  final chipBorderColor = (d == 'Already Using' && _serviceOwner == 'other')
+                  final chipBorderColor = (d == 'Interested')
+                      ? const Color(0xFFF97316)
+                      : (d == 'Already Using' && _serviceOwner == 'other')
                       ? const Color(0xFFF97316)
                       : (d == 'Demo Scheduled')
                           ? const Color(0xFFA855F7)
@@ -432,7 +441,36 @@ class _PostCallDialogState extends State<PostCallDialog> {
                       ),
                     ),
                     onSelected: (_) => setState(() {
-                      _disposition = d;
+                      const incompatibleWithInterested = {'RNR', 'Not Interested', 'Invalid'};
+                      if (d == 'Interested') {
+                        if (_isInterested || _disposition == 'Interested') {
+                          _isInterested = false;
+                          if (_disposition == 'Interested') _disposition = 'Connected';
+                        } else {
+                          _isInterested = true;
+                          if (incompatibleWithInterested.contains(_disposition) ||
+                              (_disposition == 'Already Using' && _serviceOwner == 'our') ||
+                              _disposition == 'Connected') {
+                            _disposition = 'Interested';
+                          }
+                        }
+                      } else if (incompatibleWithInterested.contains(d)) {
+                        _isInterested = false;
+                        _disposition = d;
+                      } else {
+                        if (_isInterested) {
+                          if (_disposition == d) {
+                            _disposition = 'Interested';
+                          } else {
+                            _disposition = d;
+                            if (d == 'Already Using' && _serviceOwner == 'our') {
+                              _serviceOwner = 'other';
+                            }
+                          }
+                        } else {
+                          _disposition = d;
+                        }
+                      }
                     }),
                   );
                 }).toList(),

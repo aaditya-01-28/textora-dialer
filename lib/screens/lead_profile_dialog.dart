@@ -46,6 +46,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
 
   static const List<String> _statusOptions = [
     'new',
+    'interested',
     'callback',
     'demo_scheduled',
     'demo_done',

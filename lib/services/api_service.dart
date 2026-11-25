@@ -330,6 +330,7 @@ class ApiService {
     String? callTimestamp,
     String? callLogId,
     String? logSource,
+    bool isInterested = false,
   }) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/dispose');
@@ -337,6 +338,7 @@ class ApiService {
 
     final payload = <String, dynamic>{
       'disposition': disposition,
+      'isInterested': isInterested,
       'durationSeconds': durationSeconds,
       'remark': remark,
       'logSource': logSource ?? 'apk_manual',

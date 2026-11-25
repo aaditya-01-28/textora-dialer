@@ -34,6 +34,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   static const List<Map<String, String>> _defaultFilters = [
     {'id': 'all', 'label': 'All'},
     {'id': 'new', 'label': 'New'},
+    {'id': 'interested', 'label': 'Interested 🔥'},
     {'id': 'connected', 'label': 'Connected'},
     {'id': 'callback', 'label': 'Callbacks'},
     {'id': 'demos', 'label': 'Demos'},
@@ -56,6 +57,8 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     switch (filterId) {
       case 'new':
         return s == 'new' || s == 'uncontacted';
+      case 'interested':
+        return s == 'interested' || l.isInterested;
       case 'connected':
         return s == 'connected' || s == 'contacted';
       case 'callback':
@@ -826,6 +829,9 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     } else if (s == 'future_requirement') {
       color = const Color(0xFF0284C7);
       label = 'FUTURE REQ';
+    } else if (s == 'interested') {
+      color = const Color(0xFFEA580C);
+      label = 'INTERESTED 🔥';
     } else if (s == 'contacted' || s == 'connected') {
       color = const Color(0xFF06B6D4);
       label = 'CONNECTED';

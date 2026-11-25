@@ -16,6 +16,7 @@ class LeadItem {
   final String? assignedAt;
   final String? assignedRepName;
   final int callLogsCount;
+  final bool isInterested;
 
   LeadItem({
     required this.id,
@@ -29,6 +30,7 @@ class LeadItem {
     required this.status,
     required this.rnrCount,
     this.callLogsCount = 0,
+    this.isInterested = false,
     this.preferredLanguage,
     this.address,
     this.createdAt,
@@ -63,6 +65,7 @@ class LeadItem {
       updatedAt: json['updatedAt']?.toString(),
       assignedAt: json['assignedAt']?.toString() ?? json['assigned_at']?.toString() ?? json['firstAssignedAt']?.toString() ?? json['createdAt']?.toString(),
       assignedRepName: assignedRep?['fullName']?.toString() ?? json['assignedRepName']?.toString(),
+      isInterested: json['isInterested'] == true || json['is_interested'] == true,
     );
   }
 
