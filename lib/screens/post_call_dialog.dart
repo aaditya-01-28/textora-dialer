@@ -34,6 +34,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
   final _meetingLinkController = TextEditingController();
   DateTime? _scheduledDateTime;
   bool _isSaving = false;
+  String? _errorMessage;
 
   final List<String> _dispositions = [
     'Interested',
@@ -142,17 +143,14 @@ class _PostCallDialogState extends State<PostCallDialog> {
   Future<void> _handleSave() async {
     final remark = _remarkController.text.trim();
     if (remark.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('⚠️ Please enter discussion notes or a remark before saving.'),
-          backgroundColor: Color(0xFFD97706),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() => _errorMessage = 'Please enter discussion notes or a remark before saving.');
       return;
     }
 
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
 
     String finalDisposition = _disposition;
     if (_disposition == 'Already Using') {
@@ -201,14 +199,10 @@ class _PostCallDialogState extends State<PostCallDialog> {
       widget.onSaved();
       Navigator.of(context).pop();
     } else {
-      setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to save disposition. Please check your network connection.'),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() {
+        _isSaving = false;
+        _errorMessage = api.lastError ?? 'Failed to save disposition. Please check your network connection.';
+      });
     }
   }
 
@@ -913,7 +907,35 @@ class _PostCallDialogState extends State<PostCallDialog> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Save Button
               ElevatedButton(
