@@ -35,6 +35,11 @@ class _PostCallDialogState extends State<PostCallDialog> {
   DateTime? _scheduledDateTime;
   bool _isSaving = false;
   String? _errorMessage;
+  bool _showAllDispositions = false;
+
+  bool get _isScheduledDemo => widget.lead.status.toLowerCase().trim() == 'demo_scheduled';
+  bool get _isScheduledCallback => widget.lead.status.toLowerCase().trim() == 'callback';
+  bool get _isScheduledCustomer => _isScheduledDemo || _isScheduledCallback;
 
   final List<String> _dispositions = [
     'Interested',
@@ -55,6 +60,10 @@ class _PostCallDialogState extends State<PostCallDialog> {
     if (widget.isInbound) {
       _disposition = 'Connected';
       _remarkController.text = 'Customer called back after RNR';
+    } else if (_isScheduledDemo) {
+      _disposition = widget.call.durationSeconds > 0 ? 'Demo Done' : 'RNR';
+    } else if (_isScheduledCallback) {
+      _disposition = widget.call.durationSeconds > 0 ? 'Connected' : 'RNR';
     } else {
       final d = widget.call.disposition;
       if (d.contains('Other') || d.contains('Competitor') || d.contains('Purchased')) {
@@ -159,7 +168,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
           : 'Already Using Our Service';
     }
 
-    final callbackDatetimeIso = (_disposition == 'Callback' || _disposition == 'Future Requirement' || _disposition == 'Demo Done') && _scheduledDateTime != null
+    final callbackDatetimeIso = (_disposition == 'Callback' || _disposition == 'Future Requirement' || _disposition == 'Demo Done' || (_isScheduledCustomer && _disposition == 'RNR')) && _scheduledDateTime != null
         ? _scheduledDateTime!.toUtc().toIso8601String()
         : null;
 
@@ -367,14 +376,100 @@ class _PostCallDialogState extends State<PostCallDialog> {
               ),
               const SizedBox(height: 16),
 
-              Text(
-                'Select Call Outcome / Disposition *',
-                style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _isScheduledCustomer && !_showAllDispositions
+                        ? (_isScheduledDemo ? 'Update Demo Outcome *' : 'Update Callback Outcome *')
+                        : 'Select Call Outcome / Disposition *',
+                    style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  if (_isScheduledCustomer)
+                    GestureDetector(
+                      onTap: () => setState(() => _showAllDispositions = !_showAllDispositions),
+                      child: Text(
+                        _showAllDispositions ? 'Outcome Options' : 'All Dispositions',
+                        style: const TextStyle(
+                          color: Color(0xFF10B981),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
 
-              // Disposition Chips
-              Wrap(
+              // Scheduled Customer Update Outcome Options (matches Agenda Update Outcome)
+              if (_isScheduledCustomer && !_showAllDispositions)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    {
+                      'value': _isScheduledDemo ? 'Demo Done' : 'Connected',
+                      'label': _isScheduledDemo ? 'Demo Completed ✅' : 'Callback Completed ✅',
+                      'color': const Color(0xFF059669),
+                      'border': const Color(0xFF10B981),
+                    },
+                    {
+                      'value': 'RNR',
+                      'label': 'Not Picking / RNR 📵',
+                      'color': const Color(0xFFD97706),
+                      'border': const Color(0xFFF59E0B),
+                    },
+                    {
+                      'value': _isScheduledDemo ? 'Demo Scheduled' : 'Callback',
+                      'label': _isScheduledDemo ? 'Reschedule Demo 📅' : 'Reschedule Callback 📅',
+                      'color': _isScheduledDemo ? const Color(0xFF9333EA) : const Color(0xFF2563EB),
+                      'border': _isScheduledDemo ? const Color(0xFFA855F7) : const Color(0xFF3B82F6),
+                    },
+                    {
+                      'value': 'Not Interested',
+                      'label': 'Not Interested ❌',
+                      'color': const Color(0xFFE11D48),
+                      'border': const Color(0xFFF43F5E),
+                    },
+                  ].map((opt) {
+                    final val = opt['value'] as String;
+                    final isSelected = _disposition == val;
+                    final selColor = opt['color'] as Color;
+                    final bdrColor = opt['border'] as Color;
+                    return ChoiceChip(
+                      label: Text(opt['label'] as String),
+                      selected: isSelected,
+                      selectedColor: selColor,
+                      backgroundColor: chipBg,
+                      labelStyle: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : isDark
+                                ? const Color(0xFFE2E8F0)
+                                : const Color(0xFF334155),
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: isSelected
+                              ? bdrColor
+                              : isDark
+                                  ? const Color(0xFF334155).withValues(alpha: 0.7)
+                                  : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      onSelected: (_) => setState(() {
+                        _isInterested = false;
+                        _disposition = val;
+                      }),
+                    );
+                  }).toList(),
+                )
+              else
+                // Standard Disposition Chips
+                Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: _dispositions.map((d) {
@@ -470,8 +565,8 @@ class _PostCallDialogState extends State<PostCallDialog> {
                 }).toList(),
               ),
 
-              // Sub-options: Callback / Future Requirement / Demo Done Date & Time (matches Web CRM UI)
-              if (_disposition == 'Callback' || _disposition == 'Future Requirement' || _disposition == 'Demo Done') ...[
+              // Sub-options: Callback / Future Requirement / Demo Done / Scheduled RNR Date & Time (matches Web CRM UI)
+              if (_disposition == 'Callback' || _disposition == 'Future Requirement' || _disposition == 'Demo Done' || (_isScheduledCustomer && _disposition == 'RNR')) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -498,7 +593,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
                                     ? 'Expected Requirement Date'
                                     : _disposition == 'Demo Done'
                                         ? 'Post-Demo Follow-Up Date'
-                                        : 'Callback Date & Time',
+                                        : _disposition == 'RNR'
+                                            ? 'Retry Callback Date & Time'
+                                            : 'Callback Date & Time',
                                 style: const TextStyle(
                                   color: Color(0xFF1D4ED8),
                                   fontSize: 12,

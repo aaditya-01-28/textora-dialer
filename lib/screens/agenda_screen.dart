@@ -2,12 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 import 'lead_profile_dialog.dart';
+import 'post_call_dialog.dart';
 
 class AgendaScreen extends StatefulWidget {
   final UserProfile user;
@@ -18,7 +21,7 @@ class AgendaScreen extends StatefulWidget {
   State<AgendaScreen> createState() => _AgendaScreenState();
 }
 
-class _AgendaScreenState extends State<AgendaScreen> {
+class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver {
   final _api = ApiService();
   final _telephony = TelephonyService();
 
@@ -30,10 +33,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
   List<Map<String, dynamic>> _unconfirmed = [];
   final Set<String> _busyTaskIds = {};
   Timer? _refreshTimer;
+  LeadItem? _callingLead;
+  bool _isCheckingCall = false;
+  bool _isPostCallDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAgenda();
     _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted) _loadAgenda(silent: true);
@@ -42,8 +49,58 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _callingLead != null) {
+      _checkRecentCall(_callingLead!);
+    }
+  }
+
+  Future<void> _checkRecentCall(LeadItem lead) async {
+    if (_isCheckingCall || _isPostCallDialogOpen) return;
+    _isCheckingCall = true;
+    _callingLead = null;
+
+    final targetPhone = lead.phoneNumber;
+    await _telephony.clearCallState();
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 1200));
+      final callRecord = await _telephony.detectLastCallOutcome(specificPhone: targetPhone);
+      if (!mounted || callRecord == null) return;
+
+      final signature = 'outbound_${callRecord.phoneNumber}_${callRecord.callTimestamp}_${callRecord.durationSeconds}';
+      final alreadyProcessed = await StorageService().isCallSignatureProcessed(signature);
+      if (alreadyProcessed || !mounted) return;
+
+      await StorageService().markCallSignatureProcessed(signature);
+      if (!mounted) return;
+
+      _isPostCallDialogOpen = true;
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        isDismissible: false,
+        enableDrag: false,
+        backgroundColor: Colors.transparent,
+        builder: (_) => PostCallDialog(
+          lead: lead,
+          call: callRecord,
+          onSaved: () {
+            _loadAgenda(silent: true);
+            AgendaReminderService().refreshNow();
+          },
+        ),
+      );
+      _isPostCallDialogOpen = false;
+    } finally {
+      _isCheckingCall = false;
+    }
   }
 
   Future<void> _loadAgenda({bool silent = false}) async {
@@ -494,6 +551,15 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
+                          _callingLead = LeadItem(
+                            id: leadId,
+                            phoneNumber: phone,
+                            contactName: contactName,
+                            companyName: companyName,
+                            source: 'Agenda',
+                            status: isDemo ? 'demo_scheduled' : 'callback',
+                            rnrCount: 0,
+                          );
                           _telephony.makeCall(rawPhone: phone, leadId: leadId);
                         },
                         icon: const Icon(Icons.call_rounded, size: 16),
