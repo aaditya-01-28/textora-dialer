@@ -90,7 +90,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Agenda task marked as completed ✅'),
+          content: Text('Agenda task marked as completed'),
           backgroundColor: Color(0xFF059669),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 2),
@@ -245,7 +245,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'All Caught Up!',
+                            'All caught up',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 18,

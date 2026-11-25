@@ -790,18 +790,18 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
   Widget _buildLeadStatusBadge(String status) {
     Color color = const Color(0xFF94A3B8);
-    String label = status.replaceAll('_', ' ').toUpperCase();
+    String label = status.replaceAll('_', ' ');
 
     final s = status.toLowerCase().trim();
     if (s == 'new' || s == 'uncontacted') {
       color = const Color(0xFF38BDF8);
-      label = 'NEW';
+      label = 'New';
     } else if (s.contains('callback')) {
       color = const Color(0xFF818CF8);
-      label = 'CALLBACK';
+      label = 'Callback';
     } else if (s == 'demo_scheduled' || s == 'demo') {
       color = const Color(0xFFA855F7);
-      label = 'DEMO BOOKED';
+      label = 'Demo booked';
     } else if (s == 'demo_done') {
       color = const Color(0xFF14B8A6);
       label = 'DEMO DONE';

@@ -303,15 +303,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                          blurRadius: 20,
-                          spreadRadius: 2,
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: Image.asset(
                       'assets/images/logo.png',
@@ -323,12 +316,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           Image.asset('assets/images/icon.png', height: 42, width: 42),
                           const SizedBox(width: 10),
                           const Text(
-                            'TEXTORA',
+                            'Textora',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
                             ),
                           ),
                         ],
@@ -343,20 +336,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     color: Colors.white,
-                    letterSpacing: -0.5,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'FIELD CALLER & AUTO-SYNC DIALER',
+                  'Field Caller & Auto-Sync Dialer',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                     color: Color(0xFF10B981),
-                    letterSpacing: 1.2,
                   ),
                 ),
                 const SizedBox(height: 32),

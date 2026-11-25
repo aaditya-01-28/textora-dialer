@@ -525,8 +525,8 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
         border: Border.all(color: text.withValues(alpha: 0.4), width: 0.8),
       ),
       child: Text(
-        status.replaceAll('_', ' ').toUpperCase(),
-        style: TextStyle(color: text, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        status.replaceAll('_', ' '),
+        style: TextStyle(color: text, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/user_profile.dart';
@@ -317,6 +318,8 @@ class ApiService {
     }
   }
 
+  String? lastError;
+
   /// Dispose Lead with Outcome and Duration
   Future<bool> disposeLead({
     required String leadId,
@@ -332,6 +335,12 @@ class ApiService {
     String? logSource,
     bool isInterested = false,
   }) async {
+    lastError = null;
+    if (leadId.trim().isEmpty) {
+      lastError = 'Missing lead ID for this call.';
+      return false;
+    }
+
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/dispose');
     final headers = await _headers();
@@ -351,26 +360,42 @@ class ApiService {
     if (callLogId != null) payload['callLogId'] = callLogId;
 
     try {
-      var res = await http.patch(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
-      );
+      var res = await http
+          .patch(
+            url,
+            headers: headers,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 20));
 
       if (res.statusCode == 401) {
         final refreshed = await refreshToken();
         if (refreshed) {
           final newHeaders = await _headers();
-          res = await http.patch(
-            url,
-            headers: newHeaders,
-            body: jsonEncode(payload),
-          );
+          res = await http
+              .patch(
+                url,
+                headers: newHeaders,
+                body: jsonEncode(payload),
+              )
+              .timeout(const Duration(seconds: 20));
         }
       }
 
-      return res.statusCode == 200;
-    } catch (_) {
+      if (res.statusCode == 200) return true;
+
+      try {
+        final errBody = jsonDecode(res.body);
+        lastError = errBody['error']?.toString() ?? 'Server error (${res.statusCode})';
+      } catch (_) {
+        lastError = 'Server error (${res.statusCode})';
+      }
+      return false;
+    } on TimeoutException {
+      lastError = 'Request timed out. Please check your internet and try again.';
+      return false;
+    } catch (e) {
+      lastError = 'Network error: ${e.toString()}';
       return false;
     }
   }
