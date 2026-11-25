@@ -5,6 +5,7 @@ import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 import 'post_call_dialog.dart';
 import 'lead_profile_dialog.dart';
@@ -28,6 +29,8 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   String? _error;
   LeadItem? _callingLead;
   Timer? _autoSyncTimer;
+  bool _isCheckingCall = false;
+  bool _isPostCallDialogOpen = false;
 
   String _selectedFilter = 'all';
 
@@ -169,37 +172,53 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _checkRecentCall(LeadItem lead) async {
+    if (_isCheckingCall || _isPostCallDialogOpen) return;
+    _isCheckingCall = true;
     _callingLead = null;
 
-    // Small delay to let Android finalize the CallLog entry
-    await Future.delayed(const Duration(milliseconds: 1200));
-
-    final callRecord = await _telephony.detectLastCallOutcome(
-      specificPhone: lead.phoneNumber,
-    );
-
+    // Clear active call state immediately BEFORE waiting so concurrent resumed events never re-trigger
+    final targetPhone = lead.phoneNumber;
     await _telephony.clearCallState();
 
-    if (!mounted) return;
+    try {
+      // Small delay to let Android finalize the CallLog entry
+      await Future.delayed(const Duration(milliseconds: 1200));
 
-    // If no outgoing call was placed to this lead (user backed out of native dialer),
-    // do NOT pop up the disposition dialog or log any fake/waiting time.
-    if (callRecord == null) {
-      return;
+      final callRecord = await _telephony.detectLastCallOutcome(
+        specificPhone: targetPhone,
+      );
+
+      if (!mounted || callRecord == null) {
+        return;
+      }
+
+      final signature = 'outbound_${callRecord.phoneNumber}_${callRecord.callTimestamp}_${callRecord.durationSeconds}';
+      final alreadyProcessed = await StorageService().isCallSignatureProcessed(signature);
+      if (alreadyProcessed || !mounted) {
+        return;
+      }
+
+      // Mark immediately so a second lifecycle trigger cannot open a duplicate sheet
+      await StorageService().markCallSignatureProcessed(signature);
+      if (!mounted) return;
+
+      _isPostCallDialogOpen = true;
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        isDismissible: false,
+        enableDrag: false,
+        backgroundColor: Colors.transparent,
+        builder: (_) => PostCallDialog(
+          lead: lead,
+          call: callRecord,
+          onSaved: () => _loadLeads(silent: false),
+        ),
+      );
+      _isPostCallDialogOpen = false;
+    } finally {
+      _isCheckingCall = false;
     }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PostCallDialog(
-        lead: lead,
-        call: callRecord,
-        onSaved: () => _loadLeads(silent: false),
-      ),
-    );
   }
 
   Future<void> _loadLeads({bool silent = false}) async {
