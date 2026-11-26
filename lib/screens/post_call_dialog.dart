@@ -124,6 +124,12 @@ class _PostCallDialogState extends State<PostCallDialog> {
           : _disposition == 'Future Requirement'
               ? 'SELECT EXPECTED TIME'
               : 'SELECT CALLBACK TIME',
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child!,
+        );
+      },
     );
 
     if (pickedTime == null || !mounted) return;
