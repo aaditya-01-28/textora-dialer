@@ -16,6 +16,7 @@ class ApiService {
   ApiService._internal();
 
   final StorageService _storage = StorageService();
+  Future<bool>? _refreshInFlight;
 
   Future<Map<String, String>> _headers() async {
     final token = await _storage.getToken();
@@ -34,7 +35,11 @@ class ApiService {
     final res = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email.trim(), 'password': password}),
+      body: jsonEncode({
+        'email': email.trim(),
+        'password': password,
+        'client': 'mobile',
+      }),
     );
 
     if (res.statusCode != 200) {
@@ -60,8 +65,16 @@ class ApiService {
     return user;
   }
 
-  /// Silent Token Refresh to Prevent Repeated Disconnects in Mobile APK
-  Future<bool> refreshToken() async {
+  /// Silent Token Refresh to Prevent Repeated Disconnects in Mobile APK (single-flight)
+  Future<bool> refreshToken() {
+    if (_refreshInFlight != null) return _refreshInFlight!;
+    _refreshInFlight = _doRefreshToken().whenComplete(() {
+      _refreshInFlight = null;
+    });
+    return _refreshInFlight!;
+  }
+
+  Future<bool> _doRefreshToken() async {
     final refresh = await _storage.getRefreshToken();
     if (refresh == null || refresh.isEmpty) return false;
 
@@ -72,7 +85,7 @@ class ApiService {
       final res = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refresh}),
+        body: jsonEncode({'refreshToken': refresh, 'client': 'mobile'}),
       );
 
       if (res.statusCode == 200) {
@@ -134,7 +147,11 @@ class ApiService {
       final list = await getLeads(search: suffix);
       for (var l in list) {
         final leadDigits = l.phoneNumber.replaceAll(RegExp(r'\D'), '');
-        if (leadDigits.endsWith(suffix) || suffix.endsWith(leadDigits)) {
+        final secDigits = (l.secondaryPhone ?? '').replaceAll(RegExp(r'\D'), '');
+        if (leadDigits.endsWith(suffix) ||
+            suffix.endsWith(leadDigits) ||
+            (secDigits.isNotEmpty &&
+                (secDigits.endsWith(suffix) || suffix.endsWith(secDigits)))) {
           return l;
         }
       }
@@ -472,7 +489,13 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/profile');
     final headers = await _headers();
 
-    final res = await http.get(url, headers: headers);
+    var res = await http.get(url, headers: headers);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        res = await http.get(url, headers: await _headers());
+      }
+    }
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -506,11 +529,21 @@ class ApiService {
     if (currentPassword != null) payload['currentPassword'] = currentPassword;
     if (newPassword != null) payload['newPassword'] = newPassword;
 
-    final res = await http.patch(
+    var res = await http.patch(
       url,
       headers: headers,
       body: jsonEncode(payload),
     );
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        res = await http.patch(
+          url,
+          headers: await _headers(),
+          body: jsonEncode(payload),
+        );
+      }
+    }
 
     return res.statusCode == 200;
   }
@@ -545,7 +578,13 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/leads/$leadId');
     final headers = await _headers();
 
-    final res = await http.get(url, headers: headers);
+    var res = await http.get(url, headers: headers);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        res = await http.get(url, headers: await _headers());
+      }
+    }
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }

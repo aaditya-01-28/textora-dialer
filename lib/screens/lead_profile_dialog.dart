@@ -38,6 +38,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
   late TextEditingController _phoneController;
   late TextEditingController _websiteController;
   late TextEditingController _addressController;
+  late TextEditingController _secondaryPhoneController;
 
   late String _selectedStatus;
   late String _selectedVertical;
@@ -124,6 +125,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     _phoneController = TextEditingController(text: _currentLead.phoneNumber);
     _websiteController = TextEditingController(text: _currentLead.websiteUrl ?? '');
     _addressController = TextEditingController(text: _currentLead.address ?? '');
+    _secondaryPhoneController = TextEditingController(text: _currentLead.secondaryPhone ?? '');
 
     _selectedStatus = _statusOptions.contains(_currentLead.status.toLowerCase())
         ? _currentLead.status.toLowerCase()
@@ -163,6 +165,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     _phoneController.dispose();
     _websiteController.dispose();
     _addressController.dispose();
+    _secondaryPhoneController.dispose();
     super.dispose();
   }
 
@@ -194,6 +197,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     final cleanPhone = _phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
     final cleanWebsite = _websiteController.text.trim();
     final cleanAddress = _addressController.text.trim();
+    final cleanSecondaryPhone = _secondaryPhoneController.text.trim().replaceAll(RegExp(r'\D'), '');
     final cleanServices = _selectedServices.join(', ');
     final cleanLanguages = _selectedLanguages.join(', ');
 
@@ -207,6 +211,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
       'status': _selectedStatus,
       'preferredLanguage': cleanLanguages.isNotEmpty ? cleanLanguages : null,
       'address': cleanAddress.isNotEmpty ? cleanAddress : null,
+      'secondaryPhone': cleanSecondaryPhone.isNotEmpty ? cleanSecondaryPhone : null,
     };
 
     try {
@@ -222,6 +227,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
           status: _selectedStatus,
           preferredLanguage: cleanLanguages.isNotEmpty ? cleanLanguages : null,
           address: cleanAddress.isNotEmpty ? cleanAddress : null,
+          secondaryPhone: cleanSecondaryPhone.isNotEmpty ? cleanSecondaryPhone : null,
         );
 
         if (mounted) {
@@ -719,6 +725,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
           _buildTextField('Website URL', _websiteController, 'https://example.com', isDark, titleColor, subColor),
           const SizedBox(height: 12),
           _buildTextField('Address / City', _addressController, 'e.g. Mumbai, Maharashtra', isDark, titleColor, subColor),
+          _buildTextField('Alternate / 2nd Number (Call or WA)', _secondaryPhoneController, '10-digit alternate number', isDark, titleColor, subColor),
           const SizedBox(height: 18),
 
           ElevatedButton(

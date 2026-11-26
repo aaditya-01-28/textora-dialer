@@ -29,6 +29,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   late UserProfile _currentUser;
   Timer? _profileSyncTimer;
+  Timer? _inboundPollTimer;
+  bool _isInboundDialogOpen = false;
 
   @override
   void initState() {
@@ -37,12 +39,22 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _startAgendaReminders();
     _startProfileSync();
+    _startInboundPolling();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForUpdates();
+      _checkInboundCalls();
     });
   }
 
   bool _isCheckingInbound = false;
+
+  void _startInboundPolling() {
+    _inboundPollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && !_isInboundDialogOpen) {
+        _checkInboundCalls(delayMs: 0);
+      }
+    });
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -53,44 +65,75 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _checkInboundCalls() async {
-    if (_isCheckingInbound) return;
+  Future<void> _checkInboundCalls({int delayMs = 1500}) async {
+    if (_isCheckingInbound || _isInboundDialogOpen) return;
     _isCheckingInbound = true;
 
     try {
-      // Delay slightly so Android telephony provider can finish writing the call entry
-      await Future.delayed(const Duration(milliseconds: 1500));
-      if (!mounted) return;
+      if (delayMs > 0) {
+        await Future.delayed(Duration(milliseconds: delayMs));
+      }
+      if (!mounted || _isInboundDialogOpen) return;
 
-      final result = await TelephonyService().detectLastInboundCall();
-      if (result != null && mounted) {
-        final lead = result['lead'] as LeadItem;
-        final call = result['call'] as CallSyncItem;
-        final signature = result['signature'] as String;
-
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          isDismissible: true,
-          enableDrag: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => PostCallDialog(
-            lead: lead,
-            call: call,
-            isInbound: true,
-            onDismissed: () {
-              StorageService().markCallSignatureProcessed(signature);
-            },
-            onSaved: () {
-              StorageService().markCallSignatureProcessed(signature);
-              _refreshProfile();
-            },
-          ),
-        );
+      final queue = await TelephonyService().detectPendingInboundCalls();
+      if (queue.isNotEmpty && mounted) {
+        await _showInboundQueue(queue, 0);
       }
     } catch (_) {
     } finally {
       _isCheckingInbound = false;
+    }
+  }
+
+  Future<void> _showInboundQueue(List<Map<String, dynamic>> queue, int index) async {
+    if (!mounted || index >= queue.length) return;
+    final item = queue[index];
+    final lead = item['lead'] as LeadItem;
+    final call = item['call'] as CallSyncItem;
+    final signature = item['signature'] as String;
+    final queueLabel = queue.length > 1 ? '${index + 1} of ${queue.length}' : null;
+
+    _isInboundDialogOpen = true;
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        isDismissible: call.durationSeconds == 0,
+        enableDrag: call.durationSeconds == 0,
+        backgroundColor: Colors.transparent,
+        builder: (_) => PostCallDialog(
+          lead: lead,
+          call: call,
+          isInbound: true,
+          queueLabel: queueLabel,
+          onDismissed: () async {
+            await StorageService().markCallSignatureProcessed(signature);
+            // Talk-time protection: if a connected inbound call is skipped, still log its talk time
+            if (call.durationSeconds > 0) {
+              try {
+                await ApiService().disposeLead(
+                  leadId: lead.id,
+                  disposition: 'Connected',
+                  remark: 'Inbound call auto-logged (${call.durationSeconds}s talk time)',
+                  durationSeconds: call.durationSeconds,
+                  callTimestamp: call.callTimestamp,
+                  logSource: 'inbound_sim',
+                );
+              } catch (_) {}
+            }
+          },
+          onSaved: () {
+            StorageService().markCallSignatureProcessed(signature);
+            _refreshProfile();
+          },
+        ),
+      );
+    } finally {
+      _isInboundDialogOpen = false;
+    }
+
+    if (mounted && index + 1 < queue.length) {
+      await _showInboundQueue(queue, index + 1);
     }
   }
 
@@ -123,6 +166,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _profileSyncTimer?.cancel();
+    _inboundPollTimer?.cancel();
     AgendaReminderService().stopListening();
     super.dispose();
   }

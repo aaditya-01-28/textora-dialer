@@ -11,6 +11,8 @@ class LeadItem {
   final int rnrCount;
   final String? preferredLanguage;
   final String? address;
+  final String? secondaryPhone;
+  final String? secondaryPhoneType;
   final String? createdAt;
   final String? updatedAt;
   final String? assignedAt;
@@ -33,6 +35,8 @@ class LeadItem {
     this.isInterested = false,
     this.preferredLanguage,
     this.address,
+    this.secondaryPhone,
+    this.secondaryPhoneType,
     this.createdAt,
     this.updatedAt,
     this.assignedAt,
@@ -61,6 +65,8 @@ class LeadItem {
               : 0,
       preferredLanguage: json['preferredLanguage']?.toString() ?? customMeta?['preferredLanguage']?.toString(),
       address: json['address']?.toString() ?? customMeta?['address']?.toString(),
+      secondaryPhone: json['secondaryPhone']?.toString() ?? customMeta?['secondaryPhone']?.toString(),
+      secondaryPhoneType: json['secondaryPhoneType']?.toString() ?? customMeta?['secondaryPhoneType']?.toString(),
       createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString(),
       assignedAt: json['assignedAt']?.toString() ?? json['assigned_at']?.toString() ?? json['firstAssignedAt']?.toString() ?? json['createdAt']?.toString(),
@@ -83,6 +89,8 @@ class LeadItem {
       'rnrCount': rnrCount,
       'preferredLanguage': preferredLanguage,
       'address': address,
+      'secondaryPhone': secondaryPhone,
+      'secondaryPhoneType': secondaryPhoneType,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'assignedAt': assignedAt,
@@ -103,6 +111,8 @@ class LeadItem {
     int? callLogsCount,
     String? preferredLanguage,
     String? address,
+    String? secondaryPhone,
+    String? secondaryPhoneType,
     String? createdAt,
     String? updatedAt,
     String? assignedAt,
@@ -122,6 +132,8 @@ class LeadItem {
       callLogsCount: callLogsCount ?? this.callLogsCount,
       preferredLanguage: preferredLanguage ?? this.preferredLanguage,
       address: address ?? this.address,
+      secondaryPhone: secondaryPhone ?? this.secondaryPhone,
+      secondaryPhoneType: secondaryPhoneType ?? this.secondaryPhoneType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       assignedAt: assignedAt ?? this.assignedAt,

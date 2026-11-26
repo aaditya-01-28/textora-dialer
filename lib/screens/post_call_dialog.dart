@@ -11,6 +11,7 @@ class PostCallDialog extends StatefulWidget {
   final VoidCallback onSaved;
   final VoidCallback? onDismissed;
   final bool isInbound;
+  final String? queueLabel;
 
   const PostCallDialog({
     super.key,
@@ -19,6 +20,7 @@ class PostCallDialog extends StatefulWidget {
     required this.onSaved,
     this.onDismissed,
     this.isInbound = false,
+    this.queueLabel,
   });
 
   @override
@@ -231,8 +233,10 @@ class _PostCallDialogState extends State<PostCallDialog> {
     final inputBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
     final chipBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
 
+    final isMissedInbound = widget.isInbound && widget.call.durationSeconds == 0;
+
     return PopScope(
-      canPop: widget.isInbound,
+      canPop: widget.isInbound && widget.call.durationSeconds == 0,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           widget.onDismissed?.call();
@@ -290,19 +294,25 @@ class _PostCallDialogState extends State<PostCallDialog> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+                        color: (isMissedInbound ? const Color(0xFFD97706) : const Color(0xFF0284C7)).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4)),
+                        border: Border.all(color: (isMissedInbound ? const Color(0xFFD97706) : const Color(0xFF0284C7)).withValues(alpha: 0.4)),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.call_received, size: 12, color: Color(0xFF38BDF8)),
-                          SizedBox(width: 4),
+                          Icon(
+                            isMissedInbound ? Icons.phone_missed : Icons.call_received,
+                            size: 12,
+                            color: isMissedInbound ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
+                          ),
+                          const SizedBox(width: 4),
                           Text(
-                            'INBOUND CUSTOMER CALL',
+                            isMissedInbound
+                                ? 'MISSED INBOUND CALL${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}'
+                                : 'INBOUND CUSTOMER CALL${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}',
                             style: TextStyle(
-                              color: Color(0xFF38BDF8),
+                              color: isMissedInbound ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,

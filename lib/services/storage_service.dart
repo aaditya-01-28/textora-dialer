@@ -16,6 +16,10 @@ class StorageService {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  String? _cachedToken;
+  String? _cachedRefreshToken;
+  UserProfile? _cachedUser;
+
   static const String _keyToken = 'auth_token';
   static const String _keyRefreshToken = 'auth_refresh_token';
   static const String _keyUser = 'user_profile';
@@ -24,32 +28,100 @@ class StorageService {
   static const String _defaultUrl = 'https://crm.textorasms.com';
 
   Future<void> saveToken(String token) async {
-    await _secureStorage.write(key: _keyToken, value: token);
+    _cachedToken = token;
+    try {
+      await _secureStorage.write(key: _keyToken, value: token);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyToken, token);
+    } catch (_) {}
   }
 
   Future<String?> getToken() async {
-    return await _secureStorage.read(key: _keyToken);
+    if (_cachedToken != null && _cachedToken!.isNotEmpty) {
+      return _cachedToken;
+    }
+    try {
+      final sec = await _secureStorage.read(key: _keyToken);
+      if (sec != null && sec.isNotEmpty) {
+        _cachedToken = sec;
+        return sec;
+      }
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefVal = prefs.getString(_keyToken);
+      if (prefVal != null && prefVal.isNotEmpty) {
+        _cachedToken = prefVal;
+        return prefVal;
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> saveRefreshToken(String token) async {
-    await _secureStorage.write(key: _keyRefreshToken, value: token);
+    _cachedRefreshToken = token;
+    try {
+      await _secureStorage.write(key: _keyRefreshToken, value: token);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyRefreshToken, token);
+    } catch (_) {}
   }
 
   Future<String?> getRefreshToken() async {
-    return await _secureStorage.read(key: _keyRefreshToken);
+    if (_cachedRefreshToken != null && _cachedRefreshToken!.isNotEmpty) {
+      return _cachedRefreshToken;
+    }
+    try {
+      final sec = await _secureStorage.read(key: _keyRefreshToken);
+      if (sec != null && sec.isNotEmpty) {
+        _cachedRefreshToken = sec;
+        return sec;
+      }
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefVal = prefs.getString(_keyRefreshToken);
+      if (prefVal != null && prefVal.isNotEmpty) {
+        _cachedRefreshToken = prefVal;
+        return prefVal;
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> saveUserProfile(UserProfile user) async {
+    _cachedUser = user;
     final raw = jsonEncode(user.toJson());
-    await _secureStorage.write(key: _keyUser, value: raw);
+    try {
+      await _secureStorage.write(key: _keyUser, value: raw);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyUser, raw);
+    } catch (_) {}
   }
 
   Future<UserProfile?> getUserProfile() async {
-    final raw = await _secureStorage.read(key: _keyUser);
-    if (raw == null) return null;
+    if (_cachedUser != null) return _cachedUser;
+    String? raw;
+    try {
+      raw = await _secureStorage.read(key: _keyUser);
+    } catch (_) {}
+    if (raw == null || raw.isEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        raw = prefs.getString(_keyUser);
+      } catch (_) {}
+    }
+    if (raw == null || raw.isEmpty) return null;
     try {
       final map = jsonDecode(raw);
-      return UserProfile.fromJson(map);
+      _cachedUser = UserProfile.fromJson(map);
+      return _cachedUser;
     } catch (_) {
       return null;
     }
@@ -57,11 +129,26 @@ class StorageService {
 
   Future<void> saveBaseUrl(String url) async {
     final trimmed = url.trim().replaceAll(RegExp(r'/+$'), '');
-    await _secureStorage.write(key: _keyBaseUrl, value: trimmed);
+    try {
+      await _secureStorage.write(key: _keyBaseUrl, value: trimmed);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyBaseUrl, trimmed);
+    } catch (_) {}
   }
 
   Future<String> getBaseUrl() async {
-    final url = await _secureStorage.read(key: _keyBaseUrl);
+    String? url;
+    try {
+      url = await _secureStorage.read(key: _keyBaseUrl);
+    } catch (_) {}
+    if (url == null || url.isEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        url = prefs.getString(_keyBaseUrl);
+      } catch (_) {}
+    }
     if (url == null || url.contains('192.168.') || url.contains('workers.dev')) {
       return _defaultUrl;
     }
@@ -69,9 +156,20 @@ class StorageService {
   }
 
   Future<void> clearAuth() async {
-    await _secureStorage.delete(key: _keyToken);
-    await _secureStorage.delete(key: _keyRefreshToken);
-    await _secureStorage.delete(key: _keyUser);
+    _cachedToken = null;
+    _cachedRefreshToken = null;
+    _cachedUser = null;
+    try {
+      await _secureStorage.delete(key: _keyToken);
+      await _secureStorage.delete(key: _keyRefreshToken);
+      await _secureStorage.delete(key: _keyUser);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyToken);
+      await prefs.remove(_keyRefreshToken);
+      await prefs.remove(_keyUser);
+    } catch (_) {}
   }
 
   // --- Offline Call Queue & History ---
