@@ -4,6 +4,7 @@ import '../models/lead_item.dart';
 import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/telephony_service.dart';
 
 class PostCallDialog extends StatefulWidget {
   final LeadItem lead;
@@ -11,6 +12,7 @@ class PostCallDialog extends StatefulWidget {
   final VoidCallback onSaved;
   final VoidCallback? onDismissed;
   final bool isInbound;
+  final bool isAutoDetectedOutbound;
   final String? queueLabel;
 
   const PostCallDialog({
@@ -20,6 +22,7 @@ class PostCallDialog extends StatefulWidget {
     required this.onSaved,
     this.onDismissed,
     this.isInbound = false,
+    this.isAutoDetectedOutbound = false,
     this.queueLabel,
   });
 
@@ -213,10 +216,19 @@ class _PostCallDialogState extends State<PostCallDialog> {
 
     if (!mounted) return;
     if (success) {
-      await StorageService().updateCallRecordSyncStatus(widget.call.id, true);
+      await StorageService().finalizeLocalCallRecord(
+        callId: widget.call.id,
+        phoneNumber: widget.call.phoneNumber,
+        disposition: finalDisposition,
+        durationSeconds: widget.call.durationSeconds,
+        remark: remark,
+        isInterested: _isInterested || _disposition == 'Interested',
+      );
+      TelephonyService().clearCaches();
+      TelephonyService().notifyCallCompleted();
       AgendaReminderService().refreshNow();
       widget.onSaved();
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
     } else {
       setState(() {
         _isSaving = false;
@@ -289,7 +301,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (widget.isInbound) ...[
+              if (widget.isInbound || widget.isAutoDetectedOutbound) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -310,9 +322,11 @@ class _PostCallDialogState extends State<PostCallDialog> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            isMissedInbound
-                                ? 'MISSED INBOUND CALL${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}'
-                                : 'INBOUND CUSTOMER CALL${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}',
+                            widget.isAutoDetectedOutbound
+                                ? 'PHONE DIALER CALL LOG${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}'
+                                : isMissedInbound
+                                    ? 'MISSED INBOUND CALL${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}'
+                                    : 'INBOUND CUSTOMER CALL${widget.queueLabel != null ? ' • ${widget.queueLabel}' : ''}',
                             style: TextStyle(
                               color: isMissedInbound ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
                               fontSize: 10,
@@ -354,7 +368,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.isInbound ? 'Inbound Call Connected' : 'Call Completed',
+                          widget.isInbound ? (isMissedInbound ? 'Missed Inbound Call' : 'Inbound Call Connected') : 'Call Completed',
                           style: TextStyle(
                             color: titleColor,
                             fontSize: 18,

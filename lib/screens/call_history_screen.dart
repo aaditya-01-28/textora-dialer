@@ -41,10 +41,16 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       _loadCurrentUser();
     }
     _loadHistory();
+    _telephony.callCompletedNotifier.addListener(_onExternalCallCompleted);
+  }
+
+  void _onExternalCallCompleted() {
+    if (mounted) _loadHistory();
   }
 
   @override
   void dispose() {
+    _telephony.callCompletedNotifier.removeListener(_onExternalCallCompleted);
     _searchController.dispose();
     super.dispose();
   }
@@ -68,16 +74,44 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       serverList = await _api.getCallLogs(limit: 150);
     } catch (_) {}
 
-    // 3. Deduplicate and merge (local list takes precedence for unsynced items)
+    // 3. Merge server-authoritative logs first, then keep ONLY unsynced local calls or non-duplicate local items
+    String suffixOf(String raw) {
+      final digits = raw.replaceAll(RegExp(r'\D'), '');
+      return digits.length >= 10 ? digits.substring(digits.length - 10) : digits;
+    }
+
+    int parseEpoch(String iso) {
+      try {
+        return DateTime.parse(iso).toUtc().millisecondsSinceEpoch;
+      } catch (_) {
+        return 0;
+      }
+    }
+
     final Map<String, CallSyncItem> callMap = {};
-    for (var call in localList) {
+    for (var call in serverList) {
       final key = call.id.isNotEmpty ? call.id : '${call.phoneNumber}_${call.callTimestamp}';
       callMap[key] = call;
     }
-    for (var call in serverList) {
-      final key = call.id.isNotEmpty ? call.id : '${call.phoneNumber}_${call.callTimestamp}';
-      if (!callMap.containsKey(key)) {
-        callMap[key] = call;
+
+    for (var localCall in localList) {
+      final key = localCall.id.isNotEmpty ? localCall.id : '${localCall.phoneNumber}_${localCall.callTimestamp}';
+      if (callMap.containsKey(key)) continue;
+
+      final lSuffix = suffixOf(localCall.phoneNumber);
+      final lTs = parseEpoch(localCall.callTimestamp);
+
+      // Skip local placeholder/synced items that already exist in serverList within 5 minutes
+      final alreadyOnServer = serverList.any((s) {
+        if (suffixOf(s.phoneNumber) != lSuffix) return false;
+        final sTs = parseEpoch(s.callTimestamp);
+        final timeDiffMs = (sTs - lTs).abs();
+        final durMatch = (s.durationSeconds - localCall.durationSeconds).abs() <= 5;
+        return timeDiffMs <= 5 * 60 * 1000 && (durMatch || localCall.isSynced);
+      });
+
+      if (!alreadyOnServer && (!localCall.isSynced || serverList.isEmpty)) {
+        callMap[key] = localCall;
       }
     }
 

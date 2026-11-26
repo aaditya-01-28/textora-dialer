@@ -5,6 +5,8 @@ import '../models/user_profile.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
+import '../services/agenda_reminder_service.dart';
+import 'package:intl/intl.dart';
 
 class LeadProfileDialog extends StatefulWidget {
   final LeadItem lead;
@@ -31,6 +33,8 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
   bool _isSaving = false;
   bool _isLoadingHistory = true;
   List<Map<String, dynamic>> _callLogs = [];
+  List<Map<String, dynamic>> _tasks = [];
+  List<Map<String, dynamic>> _stageHistory = [];
 
   // Controllers for editing
   late TextEditingController _nameController;
@@ -59,12 +63,43 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     'already_using',
     'already_purchased',
     'future_requirement',
-    'contacted',
-    'qualified',
-    'proposal_sent',
-    'negotiation',
-    'junk',
+    'invalid',
   ];
+
+  static String _formatStatusLabel(String status) {
+    switch (status.toLowerCase().trim()) {
+      case 'new':
+        return 'NEW LEAD';
+      case 'interested':
+        return 'INTERESTED';
+      case 'callback':
+        return 'CALLBACK REQUIRED';
+      case 'demo_scheduled':
+        return 'DEMO SCHEDULED';
+      case 'demo_done':
+        return 'DEMO DONE';
+      case 'deal_created':
+        return 'DEAL IN PIPELINE';
+      case 'won':
+        return 'CLOSED WON';
+      case 'lost':
+        return 'CLOSED LOST';
+      case 'rnr':
+        return 'RNR';
+      case 'not_interested':
+        return 'NOT INTERESTED';
+      case 'already_using':
+        return 'ALREADY USING OUR SERVICE';
+      case 'already_purchased':
+        return 'ALREADY PURCHASED / OTHER COMPANY';
+      case 'future_requirement':
+        return 'FUTURE REQUIREMENT';
+      case 'invalid':
+        return 'INVALID NUMBER';
+      default:
+        return status.replaceAll('_', ' ').toUpperCase();
+    }
+  }
 
   static const List<String> _verticalOptions = [
     'Unspecified',
@@ -174,10 +209,14 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
       final details = await _api.getLeadDetails(_currentLead.id);
       if (details.isNotEmpty && mounted) {
         final logs = (details['callLogs'] as List?)?.map((e) => e as Map<String, dynamic>).toList() ?? [];
+        final tasks = (details['tasks'] as List?)?.map((e) => e as Map<String, dynamic>).toList() ?? [];
+        final stages = (details['stageHistory'] as List?)?.map((e) => e as Map<String, dynamic>).toList() ?? [];
         final fetchedLead = LeadItem.fromJson(details);
         setState(() {
           _currentLead = fetchedLead;
           _callLogs = logs;
+          _tasks = tasks;
+          _stageHistory = stages;
           _isLoadingHistory = false;
           if (!_isEditing) {
             _initControllers();
@@ -388,6 +427,10 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 _buildDossierView(cardBg, borderColor, titleColor, subColor, dividerColor),
               const SizedBox(height: 20),
 
+              // Scheduled Follow-Ups & Demos with Edit option for Level 2 & 3
+              _buildTasksSection(isDark, cardBg, borderColor, titleColor, subColor, dividerColor),
+              const SizedBox(height: 16),
+
               // Call History with this Lead
               _buildCallHistorySection(isDark, cardBg, borderColor, titleColor, subColor, dividerColor),
               const SizedBox(height: 20),
@@ -515,9 +558,24 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
     } else if (s == 'rnr') {
       bg = Colors.amber.withValues(alpha: 0.15);
       text = Colors.amber;
-    } else if (s == 'lost' || s == 'junk') {
+    } else if (s == 'lost') {
       bg = Colors.red.withValues(alpha: 0.15);
       text = Colors.redAccent;
+    } else if (s == 'invalid') {
+      bg = const Color(0xFFF43F5E).withValues(alpha: 0.15);
+      text = const Color(0xFFF43F5E);
+    } else if (s == 'interested') {
+      bg = const Color(0xFFEA580C).withValues(alpha: 0.15);
+      text = const Color(0xFFEA580C);
+    } else if (s == 'already_using') {
+      bg = const Color(0xFF059669).withValues(alpha: 0.15);
+      text = const Color(0xFF059669);
+    } else if (s == 'already_purchased') {
+      bg = const Color(0xFFEA580C).withValues(alpha: 0.15);
+      text = const Color(0xFFEA580C);
+    } else if (s == 'future_requirement') {
+      bg = const Color(0xFF0284C7).withValues(alpha: 0.15);
+      text = const Color(0xFF0284C7);
     } else {
       bg = const Color(0xFF64748B).withValues(alpha: 0.15);
       text = const Color(0xFF64748B);
@@ -531,7 +589,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
         border: Border.all(color: text.withValues(alpha: 0.4), width: 0.8),
       ),
       child: Text(
-        status.replaceAll('_', ' ').toUpperCase(),
+        _formatStatusLabel(status),
         style: TextStyle(color: text, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
       ),
     );
@@ -818,7 +876,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               items: items.map((opt) {
                 return DropdownMenuItem<String>(
                   value: opt,
-                  child: Text(opt.replaceAll('_', ' ').toUpperCase()),
+                  child: Text(_formatStatusLabel(opt)),
                 );
               }).toList(),
               onChanged: onChanged,
@@ -1126,12 +1184,7 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                 String displayTime = rawTime;
                 try {
                   final parsed = DateTime.parse(rawTime).toLocal();
-                  final y = parsed.year.toString().padLeft(4, '0');
-                  final mo = parsed.month.toString().padLeft(2, '0');
-                  final da = parsed.day.toString().padLeft(2, '0');
-                  final ho = parsed.hour.toString().padLeft(2, '0');
-                  final mi = parsed.minute.toString().padLeft(2, '0');
-                  displayTime = '$y-$mo-$da $ho:$mi';
+                  displayTime = DateFormat('dd MMM yyyy, hh:mm a').format(parsed);
                 } catch (_) {
                   displayTime = rawTime.length >= 16 ? rawTime.substring(0, 16).replaceAll('T', ' ') : rawTime;
                 }
@@ -1188,6 +1241,19 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
                       '${dur}s',
                       style: TextStyle(color: subColor, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
+                    if (widget.user?.isManagerOrAbove == true && log['id'] != null) ...[
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 17, color: Color(0xFF10B981)),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        tooltip: 'Edit Log (Level 2 & 3)',
+                        onPressed: () => _openEditLogSheet(
+                          isDark: isDark,
+                          callLog: log,
+                        ),
+                      ),
+                    ],
                   ],
                 );
               },
@@ -1196,4 +1262,460 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
       ),
     );
   }
+
+  Widget _buildTasksSection(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color titleColor,
+    Color subColor,
+    Color dividerColor,
+  ) {
+    if (_tasks.isEmpty) return const SizedBox.shrink();
+    final canEdit = widget.user?.isManagerOrAbove == true;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.event_note_rounded, color: Color(0xFF8B5CF6), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Scheduled Follow-Ups & Demos',
+                style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _tasks.length > 6 ? 6 : _tasks.length,
+            separatorBuilder: (context, index) => Divider(color: dividerColor, height: 14),
+            itemBuilder: (context, index) {
+              final task = _tasks[index];
+              final isDemo = task['taskType']?.toString() == 'product_demo';
+              final status = task['status']?.toString() ?? 'pending';
+              final schedStr = task['scheduledTime']?.toString();
+              final notes = task['notes']?.toString().trim();
+
+              String timeLabel = 'TBD (Client yet to confirm)';
+              if (schedStr != null && schedStr.isNotEmpty) {
+                try {
+                  timeLabel = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(schedStr).toLocal());
+                } catch (_) {
+                  timeLabel = schedStr;
+                }
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              isDemo ? 'Product Demo' : 'Callback',
+                              style: TextStyle(
+                                color: isDemo ? const Color(0xFFA855F7) : const Color(0xFF3B82F6),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: (status == 'completed'
+                                        ? const Color(0xFF10B981)
+                                        : Colors.amber)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                status.toUpperCase(),
+                                style: TextStyle(
+                                  color: status == 'completed' ? const Color(0xFF10B981) : Colors.amber,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          timeLabel,
+                          style: TextStyle(color: titleColor, fontSize: 11.5, fontWeight: FontWeight.w600),
+                        ),
+                        if (notes != null && notes.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            notes,
+                            style: TextStyle(color: subColor, fontSize: 10.5),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (canEdit && task['id'] != null)
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF10B981)),
+                      tooltip: 'Edit Scheduled Time / Notes (Level 2 & 3)',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      onPressed: () => _openEditLogSheet(
+                        isDark: isDark,
+                        task: task,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openEditLogSheet({
+    required bool isDark,
+    Map<String, dynamic>? callLog,
+    Map<String, dynamic>? task,
+  }) async {
+    final isCall = callLog != null;
+    final modalBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final inputBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final inputBorder = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+
+    const dispositions = [
+      'Interested',
+      'Connected',
+      'Callback',
+      'Demo Scheduled',
+      'Demo Done',
+      'Future Requirement',
+      'RNR',
+      'Not Interested',
+      'Invalid',
+      'Already Using Our Service',
+      'Already Purchased or Using Other Company Service',
+    ];
+
+    String selectedDisp = callLog?['disposition']?.toString() ?? 'Callback';
+    if (!dispositions.contains(selectedDisp)) {
+      selectedDisp = 'Callback';
+    }
+
+    final remarkCtrl = TextEditingController(
+      text: (isCall ? callLog['remark'] : task?['notes'])?.toString() ?? '',
+    );
+
+    DateTime? selectedScheduledDt;
+    final rawSched = task?['scheduledTime']?.toString();
+    if (rawSched != null && rawSched.isNotEmpty) {
+      try {
+        selectedScheduledDt = DateTime.parse(rawSched).toLocal();
+      } catch (_) {}
+    } else if (isCall) {
+      for (final t in _tasks) {
+        if (t['status'] == 'pending' && t['scheduledTime'] != null) {
+          try {
+            selectedScheduledDt = DateTime.parse(t['scheduledTime'].toString()).toLocal();
+            break;
+          } catch (_) {}
+        }
+      }
+      if (selectedScheduledDt == null && _stageHistory.isNotEmpty) {
+        final callTs = callLog['callTimestamp']?.toString();
+        DateTime? callDt;
+        try {
+          if (callTs != null) callDt = DateTime.parse(callTs).toUtc();
+        } catch (_) {}
+        for (final st in _stageHistory) {
+          final meta = st['metadata'] as Map<String, dynamic>?;
+          if (meta == null) continue;
+          final rawMetaDt = (meta['demoDatetime'] ??
+                  meta['callbackDatetime'] ??
+                  meta['retryTime'] ??
+                  meta['scheduledTime'])
+              ?.toString();
+          if (rawMetaDt != null && rawMetaDt.isNotEmpty) {
+            try {
+              final stCreated = DateTime.parse(st['createdAt'].toString()).toUtc();
+              if (callDt == null || callDt.difference(stCreated).inMinutes.abs() <= 5) {
+                selectedScheduledDt = DateTime.parse(rawMetaDt).toLocal();
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    DateTime? selectedCallDt;
+    if (isCall && callLog['callTimestamp'] != null) {
+      try {
+        selectedCallDt = DateTime.parse(callLog['callTimestamp'].toString()).toLocal();
+      } catch (_) {}
+    }
+
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          Future<DateTime?> pick12hDateTime(DateTime? initial) async {
+            final now = DateTime.now();
+            final d = await showDatePicker(
+              context: ctx,
+              initialDate: initial ?? now,
+              firstDate: DateTime(2024),
+              lastDate: now.add(const Duration(days: 730)),
+            );
+            if (d == null || !ctx.mounted) return null;
+            final t = await showTimePicker(
+              context: ctx,
+              initialTime: initial != null ? TimeOfDay.fromDateTime(initial) : TimeOfDay.now(),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+                child: child!,
+              ),
+            );
+            if (t == null) return null;
+            return DateTime(d.year, d.month, d.day, t.hour, t.minute);
+          }
+
+          return Container(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            decoration: BoxDecoration(
+              color: modalBg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isCall ? 'Edit Call Log (Level 2 & 3)' : 'Edit Follow-Up Schedule (Level 2 & 3)',
+                        style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: subColor),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (isCall) ...[
+                    Text('Disposition / Outcome', style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: inputBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: inputBorder),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedDisp,
+                          isExpanded: true,
+                          dropdownColor: modalBg,
+                          style: TextStyle(color: titleColor, fontSize: 13),
+                          items: dispositions.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                          onChanged: (val) => setSheetState(() => selectedDisp = val!),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  Text('Scheduled Meeting / Callback Time (12h AM/PM)', style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await pick12hDateTime(selectedScheduledDt);
+                      if (picked != null) setSheetState(() => selectedScheduledDt = picked);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: inputBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: inputBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_month_rounded, size: 18, color: Color(0xFF10B981)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              selectedScheduledDt != null
+                                  ? DateFormat('dd MMM yyyy, hh:mm a').format(selectedScheduledDt!)
+                                  : 'Tap to set date & time (AM/PM)',
+                              style: TextStyle(
+                                color: selectedScheduledDt != null ? titleColor : subColor,
+                                fontSize: 13,
+                                fontWeight: selectedScheduledDt != null ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                          if (selectedScheduledDt != null)
+                            GestureDetector(
+                              onTap: () => setSheetState(() => selectedScheduledDt = null),
+                              child: Icon(Icons.clear, size: 17, color: subColor),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isCall && selectedCallDt != null) ...[
+                    const SizedBox(height: 12),
+                    Text('Call Logged Time (12h AM/PM)', style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await pick12hDateTime(selectedCallDt);
+                        if (picked != null) setSheetState(() => selectedCallDt = picked);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: inputBg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: inputBorder),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time_rounded, size: 18, color: Color(0xFF3B82F6)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                DateFormat('dd MMM yyyy, hh:mm a').format(selectedCallDt!),
+                                style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Text('Notes / Remark', style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: remarkCtrl,
+                    maxLines: 2,
+                    style: TextStyle(color: titleColor, fontSize: 13),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: inputBg,
+                      contentPadding: const EdgeInsets.all(12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: inputBorder)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: inputBorder)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            setSheetState(() => isSaving = true);
+                            final matchedStageIds = <String>[];
+                            if (isCall && callLog['callTimestamp'] != null) {
+                              try {
+                                final cDt = DateTime.parse(callLog['callTimestamp'].toString()).toUtc();
+                                for (final st in _stageHistory) {
+                                  final stDt = DateTime.parse(st['createdAt'].toString()).toUtc();
+                                  if (cDt.difference(stDt).inMinutes.abs() <= 2 && st['id'] != null) {
+                                    matchedStageIds.add(st['id'].toString());
+                                  }
+                                }
+                              } catch (_) {}
+                            }
+                            final payload = <String, dynamic>{
+                              'callLogIds': isCall && callLog['id'] != null ? [callLog['id'].toString()] : [],
+                              'stageHistoryIds': matchedStageIds,
+                              'taskIds': !isCall && task?['id'] != null ? [task!['id'].toString()] : [],
+                              if (isCall) 'disposition': selectedDisp,
+                              'remark': remarkCtrl.text.trim(),
+                              'scheduledTime': selectedScheduledDt?.toUtc().toIso8601String(),
+                              if (isCall && selectedCallDt != null)
+                                'callTimestamp': selectedCallDt!.toUtc().toIso8601String(),
+                            };
+                            final ok = await _api.editLeadTimelineLog(_currentLead.id, payload);
+                            if (!ctx.mounted) return;
+                            if (ok) {
+                              Navigator.pop(ctx);
+                              _fetchLeadDetails();
+                              AgendaReminderService().refreshNow();
+                              TelephonyService().clearCaches();
+                              TelephonyService().notifyCallCompleted();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Color(0xFF059669),
+                                    content: Text('Log updated & synced across Agenda ✅'),
+                                  ),
+                                );
+                              }
+                            } else {
+                              setSheetState(() => isSaving = false);
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: Colors.redAccent,
+                                  content: Text(_api.lastError ?? 'Failed to update log'),
+                                ),
+                                );
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    Future.delayed(const Duration(milliseconds: 500), remarkCtrl.dispose);
+  }
+
 }

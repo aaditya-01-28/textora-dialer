@@ -61,11 +61,78 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _refreshProfile();
       _checkForUpdates();
-      _checkInboundCalls();
+      _handleResumeCallChecks();
     }
   }
 
-  Future<void> _checkInboundCalls({int delayMs = 1500}) async {
+  Future<void> _handleResumeCallChecks() async {
+    // 1. Handle active in-app dialed call first (from Leads, Agenda, Calls, Dashboard, or Push-to-Dial)
+    await _checkActiveOutboundCall();
+    // 2. Then scan carrier call log for any inbound, missed, or unlogged native-dialed calls
+    await _checkInboundCalls(delayMs: 400);
+  }
+
+  Future<void> _checkActiveOutboundCall() async {
+    final tel = TelephonyService();
+    if (!tel.hasFreshActiveCall || _isCheckingInbound || _isInboundDialogOpen) return;
+
+    _isCheckingInbound = true;
+    final targetPhone = tel.activeDialedNumber;
+    final targetLeadId = tel.activeLeadId;
+    await tel.clearCallState();
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 1100));
+      final callRecord = await tel.detectLastCallOutcome(specificPhone: targetPhone);
+      if (!mounted || callRecord == null) return;
+
+      int callEpoch = 0;
+      try {
+        callEpoch = DateTime.parse(callRecord.callTimestamp).toUtc().millisecondsSinceEpoch;
+      } catch (_) {}
+      final canonicalSig = TelephonyService.buildCallSignature(
+        phoneNumber: callRecord.phoneNumber,
+        timestampEpoch: callEpoch,
+        durationSeconds: callRecord.durationSeconds,
+        isInbound: false,
+      );
+      if (await StorageService().isCallSignatureProcessed(canonicalSig) || !mounted) return;
+
+      final lead = await tel.findLeadForActiveCall(
+        leadId: callRecord.leadId ?? targetLeadId,
+        phone: targetPhone ?? callRecord.phoneNumber,
+      );
+      if (!mounted || lead == null) return;
+
+      await StorageService().markCallSignatureProcessed(canonicalSig);
+      if (!mounted) return;
+
+      _isInboundDialogOpen = true;
+      try {
+        await showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          isDismissible: false,
+          enableDrag: false,
+          backgroundColor: Colors.transparent,
+          builder: (_) => PostCallDialog(
+            lead: lead,
+            call: callRecord,
+            onSaved: () {
+              _refreshProfile();
+            },
+          ),
+        );
+      } finally {
+        _isInboundDialogOpen = false;
+      }
+    } catch (_) {
+    } finally {
+      _isCheckingInbound = false;
+    }
+  }
+
+  Future<void> _checkInboundCalls({int delayMs = 1200}) async {
     if (_isCheckingInbound || _isInboundDialogOpen) return;
     _isCheckingInbound = true;
 
@@ -91,6 +158,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final lead = item['lead'] as LeadItem;
     final call = item['call'] as CallSyncItem;
     final signature = item['signature'] as String;
+    final isInboundCall = item['isInbound'] != false;
     final queueLabel = queue.length > 1 ? '${index + 1} of ${queue.length}' : null;
 
     _isInboundDialogOpen = true;
@@ -104,26 +172,31 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         builder: (_) => PostCallDialog(
           lead: lead,
           call: call,
-          isInbound: true,
+          isInbound: isInboundCall,
+          isAutoDetectedOutbound: !isInboundCall,
           queueLabel: queueLabel,
           onDismissed: () async {
             await StorageService().markCallSignatureProcessed(signature);
-            // Talk-time protection: if a connected inbound call is skipped, still log its talk time
+            // Talk-time protection: if any connected call is skipped, still log its exact talk time
             if (call.durationSeconds > 0) {
               try {
                 await ApiService().disposeLead(
                   leadId: lead.id,
                   disposition: 'Connected',
-                  remark: 'Inbound call auto-logged (${call.durationSeconds}s talk time)',
+                  remark: isInboundCall
+                      ? 'Inbound call auto-logged (${call.durationSeconds}s talk time)'
+                      : 'Phone dialer call auto-logged (${call.durationSeconds}s talk time)',
                   durationSeconds: call.durationSeconds,
                   callTimestamp: call.callTimestamp,
-                  logSource: 'inbound_sim',
+                  logSource: isInboundCall ? 'inbound_sim' : 'apk_manual',
                 );
+                TelephonyService().clearCaches();
+                TelephonyService().notifyCallCompleted();
               } catch (_) {}
             }
           },
-          onSaved: () {
-            StorageService().markCallSignatureProcessed(signature);
+          onSaved: () async {
+            await StorageService().markCallSignatureProcessed(signature);
             _refreshProfile();
           },
         ),

@@ -225,4 +225,51 @@ class StorageService {
     final encoded = current.map((e) => jsonEncode(e.toJson())).toList();
     await prefs.setStringList(_keyCallQueue, encoded);
   }
+
+  Future<void> finalizeLocalCallRecord({
+    required String callId,
+    required String phoneNumber,
+    required String disposition,
+    required int durationSeconds,
+    String? remark,
+    bool isInterested = false,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = await getCallHistory();
+    final cleanDigits = phoneNumber.replaceAll(RegExp(r'\D'), '');
+    final suffix = cleanDigits.length >= 10 ? cleanDigits.substring(cleanDigits.length - 10) : cleanDigits;
+
+    // Update or remove temporary 'Captured from SIM dialer' placeholder so server record never duplicates
+    final nextList = <CallSyncItem>[];
+    bool replaced = false;
+    for (final item in current) {
+      final itemDigits = item.phoneNumber.replaceAll(RegExp(r'\D'), '');
+      final itemSuffix = itemDigits.length >= 10 ? itemDigits.substring(itemDigits.length - 10) : itemDigits;
+      final isPlaceholder = item.id == callId ||
+          (item.remark == 'Captured from SIM dialer' && itemSuffix == suffix && (item.durationSeconds - durationSeconds).abs() <= 3);
+      if (isPlaceholder && !replaced) {
+        replaced = true;
+        nextList.add(CallSyncItem(
+          id: item.id,
+          leadId: item.leadId,
+          phoneNumber: item.phoneNumber,
+          durationSeconds: durationSeconds > item.durationSeconds ? durationSeconds : item.durationSeconds,
+          disposition: disposition,
+          callTimestamp: item.callTimestamp,
+          remark: (remark != null && remark.trim().isNotEmpty) ? remark.trim() : item.remark,
+          recordingUrl: item.recordingUrl,
+          logSource: 'apk_manual',
+          leadContactName: item.leadContactName,
+          leadCompanyName: item.leadCompanyName,
+          leadStatus: item.leadStatus,
+          isInterested: isInterested,
+          isSynced: true,
+        ));
+      } else if (!isPlaceholder) {
+        nextList.add(item);
+      }
+    }
+    final encoded = nextList.map((e) => jsonEncode(e.toJson())).toList();
+    await prefs.setStringList(_keyCallQueue, encoded);
+  }
 }

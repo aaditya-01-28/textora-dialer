@@ -635,6 +635,44 @@ class ApiService {
     return true;
   }
 
+  /// Edit a logged call / stage / scheduled task (Level 2 Manager & Level 3 Super Admin)
+  Future<bool> editLeadTimelineLog(String leadId, Map<String, dynamic> payload) async {
+    final baseUrl = await _storage.getBaseUrl();
+    final url = Uri.parse('$baseUrl/api/leads/$leadId/timeline/edit');
+    final headers = await _headers();
+
+    try {
+      var res = await http.patch(
+        url,
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+
+      if (res.statusCode == 401) {
+        final refreshed = await refreshToken();
+        if (refreshed) {
+          res = await http.patch(
+            url,
+            headers: await _headers(),
+            body: jsonEncode(payload),
+          );
+        }
+      }
+
+      if (res.statusCode != 200) {
+        try {
+          final body = jsonDecode(res.body);
+          lastError = body['error']?.toString() ?? 'Failed to edit log';
+        } catch (_) {}
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
   /// Fetch Scheduled Agenda & Tasks (Today, Overdue, Upcoming)
   Future<Map<String, dynamic>> getAgendaTasks() async {
     final baseUrl = await _storage.getBaseUrl();

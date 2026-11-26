@@ -49,6 +49,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _checkOfflineCalls();
     _startPushToDialCompanion();
     _loadAppVersion();
+    _telephony.callCompletedNotifier.addListener(_onCallCompleted);
 
     // Real-time automatic background refresh every 15 seconds
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
@@ -70,9 +71,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
+  void _onCallCompleted() {
+    if (mounted) _loadDashboard(silent: true);
+  }
+
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _telephony.callCompletedNotifier.removeListener(_onCallCompleted);
     _telephony.stopPushToDialListener();
     super.dispose();
   }

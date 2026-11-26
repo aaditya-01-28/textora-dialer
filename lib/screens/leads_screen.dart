@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
-import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
-import 'post_call_dialog.dart';
 import 'lead_profile_dialog.dart';
 
 class LeadsScreen extends StatefulWidget {
@@ -27,10 +24,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   List<LeadItem> _leads = [];
   bool _isLoading = true;
   String? _error;
-  LeadItem? _callingLead;
   Timer? _autoSyncTimer;
-  bool _isCheckingCall = false;
-  bool _isPostCallDialogOpen = false;
 
   String _selectedFilter = 'all';
 
@@ -47,6 +41,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     {'id': 'future_requirement', 'label': 'Future Req'},
     {'id': 'already_purchased', 'label': 'Purchased Other'},
     {'id': 'not_interested', 'label': 'Not Interested'},
+    {'id': 'invalid', 'label': 'Invalid'},
     {'id': 'won', 'label': 'Won 🏆'},
     {'id': 'lost', 'label': 'Lost'},
     {'id': 'other', 'label': 'Other'},
@@ -82,12 +77,13 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
         return s == 'not_interested' || s == 'not interested';
       case 'won':
         return s == 'won' || s == 'converted';
+      case 'invalid':
+        return s == 'invalid';
       case 'lost':
-        return s == 'lost' || s == 'junk';
+        return s == 'lost';
       case 'other':
-        return s == 'invalid' ||
-            (!['new', 'uncontacted', 'connected', 'contacted', 'rnr', 'won', 'converted', 'lost', 'junk', 'not_interested', 'not interested', 'already_using', 'future_requirement', 'already_purchased'].contains(s) &&
-             !s.contains('callback') && !s.contains('demo') && !s.contains('deal'));
+        return !['new', 'uncontacted', 'interested', 'connected', 'contacted', 'rnr', 'won', 'converted', 'lost', 'not_interested', 'not interested', 'already_using', 'future_requirement', 'already_purchased', 'invalid'].contains(s) &&
+             !s.contains('callback') && !s.contains('demo') && !s.contains('deal');
       default:
         return s == filterId;
     }
@@ -135,10 +131,11 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     _telephony.checkAndRequestPermissions();
     _telephony.clearCallState();
     _api.flushOfflineQueue();
+    _telephony.callCompletedNotifier.addListener(_onCallCompleted);
 
     // Auto-sync leads and offline queue every 15 seconds silently
     _autoSyncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted && _callingLead == null) {
+      if (mounted) {
         _loadLeads(silent: true);
         _api.flushOfflineQueue();
       }
@@ -148,76 +145,20 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _autoSyncTimer?.cancel();
+    _telephony.callCompletedNotifier.removeListener(_onCallCompleted);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // When the sales rep returns to the app from the native phone call:
-    if (state == AppLifecycleState.resumed) {
-      if (_callingLead != null) {
-        _checkRecentCall(_callingLead!);
-      } else if (_telephony.activeLeadId != null) {
-        final activeId = _telephony.activeLeadId;
-        final matchedLead = _leads.cast<LeadItem?>().firstWhere(
-          (l) => l?.id == activeId,
-          orElse: () => null,
-        );
-        if (matchedLead != null) {
-          _checkRecentCall(matchedLead);
-        }
-      }
-    }
+  void _onCallCompleted() {
+    if (mounted) _loadLeads(silent: false);
   }
 
-  Future<void> _checkRecentCall(LeadItem lead) async {
-    if (_isCheckingCall || _isPostCallDialogOpen) return;
-    _isCheckingCall = true;
-    _callingLead = null;
-
-    // Clear active call state immediately BEFORE waiting so concurrent resumed events never re-trigger
-    final targetPhone = lead.phoneNumber;
-    await _telephony.clearCallState();
-
-    try {
-      // Small delay to let Android finalize the CallLog entry
-      await Future.delayed(const Duration(milliseconds: 1200));
-
-      final callRecord = await _telephony.detectLastCallOutcome(
-        specificPhone: targetPhone,
-      );
-
-      if (!mounted || callRecord == null) {
-        return;
-      }
-
-      final signature = 'outbound_${callRecord.phoneNumber}_${callRecord.callTimestamp}_${callRecord.durationSeconds}';
-      final alreadyProcessed = await StorageService().isCallSignatureProcessed(signature);
-      if (alreadyProcessed || !mounted) {
-        return;
-      }
-
-      // Mark immediately so a second lifecycle trigger cannot open a duplicate sheet
-      await StorageService().markCallSignatureProcessed(signature);
-      if (!mounted) return;
-
-      _isPostCallDialogOpen = true;
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        isDismissible: false,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (_) => PostCallDialog(
-          lead: lead,
-          call: callRecord,
-          onSaved: () => _loadLeads(silent: false),
-        ),
-      );
-      _isPostCallDialogOpen = false;
-    } finally {
-      _isCheckingCall = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Active call & PostCallDialog handling is centralized in HomeShell
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadLeads(silent: true);
     }
   }
 
@@ -248,7 +189,6 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _startCall(LeadItem lead) async {
-    setState(() => _callingLead = lead);
     final launched = await _telephony.makeCall(
       rawPhone: lead.phoneNumber,
       leadId: lead.id,
@@ -257,7 +197,6 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not launch phone dialer')),
       );
-      setState(() => _callingLead = null);
     }
   }
 
@@ -836,6 +775,9 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     } else if (s == 'rnr') {
       color = Colors.amber;
       label = 'RNR';
+    } else if (s == 'invalid') {
+      color = const Color(0xFFF43F5E);
+      label = 'INVALID';
     } else if (s == 'not_interested') {
       color = const Color(0xFF64748B);
       label = 'NOT INTERESTED';

@@ -2,15 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../models/call_sync_item.dart';
 import '../models/lead_item.dart';
 import '../models/user_profile.dart';
 import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
-import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 import 'lead_profile_dialog.dart';
-import 'post_call_dialog.dart';
 
 class AgendaScreen extends StatefulWidget {
   final UserProfile user;
@@ -33,15 +30,13 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
   List<Map<String, dynamic>> _unconfirmed = [];
   final Set<String> _busyTaskIds = {};
   Timer? _refreshTimer;
-  LeadItem? _callingLead;
-  bool _isCheckingCall = false;
-  bool _isPostCallDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadAgenda();
+    _telephony.callCompletedNotifier.addListener(_onCallCompleted);
     _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted) _loadAgenda(silent: true);
     });
@@ -51,55 +46,19 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _telephony.callCompletedNotifier.removeListener(_onCallCompleted);
     super.dispose();
+  }
+
+  void _onCallCompleted() {
+    if (mounted) _loadAgenda(silent: true);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _callingLead != null) {
-      _checkRecentCall(_callingLead!);
-    }
-  }
-
-  Future<void> _checkRecentCall(LeadItem lead) async {
-    if (_isCheckingCall || _isPostCallDialogOpen) return;
-    _isCheckingCall = true;
-    _callingLead = null;
-
-    final targetPhone = lead.phoneNumber;
-    await _telephony.clearCallState();
-
-    try {
-      await Future.delayed(const Duration(milliseconds: 1200));
-      final callRecord = await _telephony.detectLastCallOutcome(specificPhone: targetPhone);
-      if (!mounted || callRecord == null) return;
-
-      final signature = 'outbound_${callRecord.phoneNumber}_${callRecord.callTimestamp}_${callRecord.durationSeconds}';
-      final alreadyProcessed = await StorageService().isCallSignatureProcessed(signature);
-      if (alreadyProcessed || !mounted) return;
-
-      await StorageService().markCallSignatureProcessed(signature);
-      if (!mounted) return;
-
-      _isPostCallDialogOpen = true;
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        isDismissible: false,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (_) => PostCallDialog(
-          lead: lead,
-          call: callRecord,
-          onSaved: () {
-            _loadAgenda(silent: true);
-            AgendaReminderService().refreshNow();
-          },
-        ),
-      );
-      _isPostCallDialogOpen = false;
-    } finally {
-      _isCheckingCall = false;
+    // Active call & PostCallDialog handling is centralized in HomeShell
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadAgenda(silent: true);
     }
   }
 
@@ -179,7 +138,7 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
       companyName: leadMap['companyName']?.toString(),
       businessVertical: leadMap['businessVertical']?.toString(),
       source: 'crm',
-      status: 'callback',
+      status: task['taskType']?.toString() == 'product_demo' ? 'demo_scheduled' : 'callback',
       rnrCount: 0,
       callLogsCount: 0,
     );
@@ -488,6 +447,24 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
                     ),
                   ),
                   const Spacer(),
+                  if (widget.user.isManagerOrAbove) ...[
+                    InkWell(
+                      onTap: () => _openEditAgendaTaskSheet(task),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.edit_outlined, size: 13, color: Color(0xFF3B82F6)),
+                            SizedBox(width: 3),
+                            Text('Edit', style: TextStyle(color: Color(0xFF3B82F6), fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Icon(Icons.access_time_rounded, size: 13, color: accent),
                   const SizedBox(width: 4),
                   Text(
@@ -551,15 +528,6 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          _callingLead = LeadItem(
-                            id: leadId,
-                            phoneNumber: phone,
-                            contactName: contactName,
-                            companyName: companyName,
-                            source: 'Agenda',
-                            status: isDemo ? 'demo_scheduled' : 'callback',
-                            rnrCount: 0,
-                          );
                           _telephony.makeCall(rawPhone: phone, leadId: leadId);
                         },
                         icon: const Icon(Icons.call_rounded, size: 16),
@@ -615,4 +583,214 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
       ),
     );
   }
+
+  Future<void> _openEditAgendaTaskSheet(Map<String, dynamic> task) async {
+    final id = task['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final modalBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final inputBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final inputBorder = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+
+    String selectedType = task['taskType']?.toString() == 'product_demo' ? 'product_demo' : 'callback';
+    final notesCtrl = TextEditingController(text: task['notes']?.toString() ?? '');
+    DateTime? selectedDt;
+    final rawSched = task['scheduledTime']?.toString();
+    if (rawSched != null && rawSched.isNotEmpty) {
+      try {
+        selectedDt = DateTime.parse(rawSched).toLocal();
+      } catch (_) {}
+    }
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Container(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            decoration: BoxDecoration(
+              color: modalBg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Edit Scheduled Task (Level 2 & 3)',
+                        style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: subColor),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('Callback')),
+                          selected: selectedType == 'callback',
+                          selectedColor: const Color(0xFF2563EB),
+                          labelStyle: TextStyle(color: selectedType == 'callback' ? Colors.white : titleColor, fontWeight: FontWeight.bold, fontSize: 12),
+                          onSelected: (_) => setSheetState(() => selectedType = 'callback'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('Product Demo')),
+                          selected: selectedType == 'product_demo',
+                          selectedColor: const Color(0xFF7C3AED),
+                          labelStyle: TextStyle(color: selectedType == 'product_demo' ? Colors.white : titleColor, fontWeight: FontWeight.bold, fontSize: 12),
+                          onSelected: (_) => setSheetState(() => selectedType = 'product_demo'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Scheduled Date & Time (12h AM/PM)', style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () async {
+                      final now = DateTime.now();
+                      final d = await showDatePicker(
+                        context: ctx,
+                        initialDate: selectedDt ?? now,
+                        firstDate: DateTime(2024),
+                        lastDate: now.add(const Duration(days: 730)),
+                      );
+                      if (d == null || !ctx.mounted) return;
+                      final t = await showTimePicker(
+                        context: ctx,
+                        initialTime: selectedDt != null ? TimeOfDay.fromDateTime(selectedDt!) : TimeOfDay.now(),
+                        builder: (context, child) => MediaQuery(
+                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+                          child: child!,
+                        ),
+                      );
+                      if (t == null) return;
+                      setSheetState(() => selectedDt = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: inputBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: inputBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_month_rounded, size: 18, color: Color(0xFF10B981)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              selectedDt != null
+                                  ? DateFormat('dd MMM yyyy, hh:mm a').format(selectedDt!)
+                                  : 'Tap to set date & time (AM/PM)',
+                              style: TextStyle(
+                                color: selectedDt != null ? titleColor : subColor,
+                                fontSize: 13,
+                                fontWeight: selectedDt != null ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                          if (selectedDt != null)
+                            GestureDetector(
+                              onTap: () => setSheetState(() => selectedDt = null),
+                              child: Icon(Icons.clear, size: 17, color: subColor),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Notes / Remark', style: TextStyle(color: subColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    style: TextStyle(color: titleColor, fontSize: 13),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: inputBg,
+                      contentPadding: const EdgeInsets.all(12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: inputBorder)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: inputBorder)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            setSheetState(() => isSaving = true);
+                            final ok = await _api.updateAgendaTask(id, {
+                              'action': 'edit_schedule',
+                              'taskType': selectedType,
+                              'scheduledTime': selectedDt?.toUtc().toIso8601String(),
+                              'notes': notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                            });
+                            if (!ctx.mounted) return;
+                            if (ok) {
+                              Navigator.pop(ctx);
+                              await _loadAgenda(silent: true);
+                              AgendaReminderService().refreshNow();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Color(0xFF059669),
+                                    content: Text('Agenda task updated ✅'),
+                                  ),
+                                );
+                              }
+                            } else {
+                              setSheetState(() => isSaving = false);
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: Colors.redAccent,
+                                  content: Text('Failed to update task.'),
+                                ),
+                                );
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save Schedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    Future.delayed(const Duration(milliseconds: 500), notesCtrl.dispose);
+  }
+
 }
