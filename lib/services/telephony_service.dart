@@ -271,6 +271,9 @@ class TelephonyService {
     return null;
   }
 
+  Map<String, LeadItem> _cachedLeadBySuffix = {};
+  DateTime? _lastLeadCacheTime;
+
   /// Inspect Android CallLog for ALL recent un-synced incoming & missed calls from active CRM leads
   Future<List<Map<String, dynamic>>> detectPendingInboundCalls() async {
     // Only check if no outbound call is currently being dialed
@@ -286,24 +289,44 @@ class TelephonyService {
       final lookbackEpoch = DateTime.now().subtract(const Duration(hours: 12)).millisecondsSinceEpoch;
       final Iterable<CallLogEntry> entries = await CallLog.query(dateFrom: lookbackEpoch);
 
-      // Fetch assigned leads once so matching is instant and works for both primary & secondary numbers
-      final leads = await _api.getLeads();
-      final leadBySuffix = <String, LeadItem>{};
-      for (final l in leads) {
-        final pDigits = l.phoneNumber.replaceAll(RegExp(r'\D'), '');
-        if (pDigits.length >= 10) {
-          leadBySuffix[pDigits.substring(pDigits.length - 10)] = l;
+      // Refresh cached lead lookup at most once every 60 seconds so 15s polling stays fast & reliable
+      bool leadsLoadedFresh = false;
+      final now = DateTime.now();
+      if (_cachedLeadBySuffix.isEmpty ||
+          _lastLeadCacheTime == null ||
+          now.difference(_lastLeadCacheTime!).inSeconds >= 60) {
+        try {
+          final leads = await _api.getLeads();
+          final nextMap = <String, LeadItem>{};
+          for (final l in leads) {
+            final pDigits = l.phoneNumber.replaceAll(RegExp(r'\D'), '');
+            if (pDigits.length >= 10) {
+              nextMap[pDigits.substring(pDigits.length - 10)] = l;
+            }
+            final sDigits = (l.secondaryPhone ?? '').replaceAll(RegExp(r'\D'), '');
+            if (sDigits.length >= 10) {
+              nextMap[sDigits.substring(sDigits.length - 10)] = l;
+            }
+          }
+          if (nextMap.isNotEmpty) {
+            _cachedLeadBySuffix = nextMap;
+            _lastLeadCacheTime = now;
+            leadsLoadedFresh = true;
+          }
+        } catch (_) {
+          // Keep existing cache if network fails; never permanently skip calls when offline
         }
-        final sDigits = (l.secondaryPhone ?? '').replaceAll(RegExp(r'\D'), '');
-        if (sDigits.length >= 10) {
-          leadBySuffix[sDigits.substring(sDigits.length - 10)] = l;
-        }
+      } else {
+        leadsLoadedFresh = true;
       }
+
+      if (_cachedLeadBySuffix.isEmpty) return [];
 
       final seenSignatures = <String>{};
 
       for (final entry in entries) {
-        final isIncoming = entry.callType == CallType.incoming;
+        final isIncoming =
+            entry.callType == CallType.incoming || entry.callType == CallType.wifiIncoming;
         final isMissed = entry.callType == CallType.missed || entry.callType == CallType.rejected;
         if (!isIncoming && !isMissed) continue;
 
@@ -323,7 +346,7 @@ class TelephonyService {
         final isProcessed = await _storage.isCallSignatureProcessed(signature);
         if (isProcessed) continue;
 
-        final matchedLead = leadBySuffix[suffix];
+        final matchedLead = _cachedLeadBySuffix[suffix];
         if (matchedLead != null) {
           final timestampIso = DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
           final isMissedCall = isMissed || duration == 0;
@@ -348,8 +371,8 @@ class TelephonyService {
             'signature': signature,
             'isMissed': isMissedCall,
           });
-        } else {
-          // Personal / non-CRM number: mark processed so we don't re-scan it
+        } else if (leadsLoadedFresh) {
+          // Only mark non-CRM personal numbers as processed when lead list loaded cleanly
           await _storage.markCallSignatureProcessed(signature);
         }
       }

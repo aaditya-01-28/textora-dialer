@@ -205,7 +205,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
       meetingLink: meetingLink,
       callTimestamp: widget.call.callTimestamp,
       callLogId: widget.call.id,
-      logSource: widget.isInbound ? 'inbound_sim' : 'apk_manual',
+      logSource: widget.isInbound
+          ? (widget.call.durationSeconds == 0 ? 'inbound_missed' : 'inbound_sim')
+          : 'apk_manual',
       isInterested: _isInterested || _disposition == 'Interested',
     );
 
