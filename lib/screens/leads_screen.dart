@@ -27,6 +27,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   Timer? _autoSyncTimer;
 
   String _selectedFilter = 'all';
+  String _sortBy = 'newest'; // 'newest', 'oldest', 'updated_desc', 'updated_asc'
 
   static const List<Map<String, String>> _defaultFilters = [
     {'id': 'all', 'label': 'All'},
@@ -132,9 +133,57 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  int _parseEpoch(String? iso) {
+    if (iso == null || iso.isEmpty) return 0;
+    try {
+      return DateTime.parse(iso).toUtc().millisecondsSinceEpoch;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  String _getSortLabel(String code) {
+    switch (code) {
+      case 'oldest':
+        return 'Oldest';
+      case 'updated_desc':
+        return 'Updated ↓';
+      case 'updated_asc':
+        return 'Updated ↑';
+      case 'newest':
+      default:
+        return 'Newest';
+    }
+  }
+
   List<LeadItem> get _filteredLeads {
-    if (_selectedFilter == 'all') return _leads;
-    return _leads.where((l) => _isLeadMatchingFilter(l, _selectedFilter)).toList();
+    final list = _selectedFilter == 'all'
+        ? List<LeadItem>.from(_leads)
+        : _leads.where((l) => _isLeadMatchingFilter(l, _selectedFilter)).toList();
+
+    list.sort((a, b) {
+      switch (_sortBy) {
+        case 'oldest':
+          final aTs = _parseEpoch(a.assignedAt ?? a.createdAt);
+          final bTs = _parseEpoch(b.assignedAt ?? b.createdAt);
+          return aTs.compareTo(bTs);
+        case 'updated_desc':
+          final aTs = _parseEpoch(a.updatedAt ?? a.createdAt);
+          final bTs = _parseEpoch(b.updatedAt ?? b.createdAt);
+          return bTs.compareTo(aTs);
+        case 'updated_asc':
+          final aTs = _parseEpoch(a.updatedAt ?? a.createdAt);
+          final bTs = _parseEpoch(b.updatedAt ?? b.createdAt);
+          return aTs.compareTo(bTs);
+        case 'newest':
+        default:
+          final aTs = _parseEpoch(a.assignedAt ?? a.createdAt);
+          final bTs = _parseEpoch(b.assignedAt ?? b.createdAt);
+          return bTs.compareTo(aTs);
+      }
+    });
+
+    return list;
   }
 
   int _getCountForFilter(String filterId) {
@@ -314,7 +363,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
           // Horizontal Status Filter Chips Bar
           _buildFilterChips(isDark),
 
-          // Leads Count Bar
+          // Leads Count Bar + Sort By
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
             child: Row(
@@ -330,13 +379,51 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const Row(
-                  children: [
-                    Icon(Icons.sim_card_outlined, color: Color(0xFF10B981), size: 14),
-                    SizedBox(width: 4),
-                    Text(
-                      'SIM Calling Active',
-                      style: TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.w600),
+                PopupMenuButton<String>(
+                  initialValue: _sortBy,
+                  tooltip: 'Sort leads',
+                  onSelected: (val) => setState(() => _sortBy = val),
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: inputBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: inputBorderColor),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sort, size: 14, color: Color(0xFF10B981)),
+                        const SizedBox(width: 4),
+                        Text(
+                          _getSortLabel(_sortBy),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: titleColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem(
+                      value: 'newest',
+                      child: Text('Newest First', style: TextStyle(fontSize: 12)),
+                    ),
+                    PopupMenuItem(
+                      value: 'oldest',
+                      child: Text('Oldest First', style: TextStyle(fontSize: 12)),
+                    ),
+                    PopupMenuItem(
+                      value: 'updated_desc',
+                      child: Text('Recently Updated', style: TextStyle(fontSize: 12)),
+                    ),
+                    PopupMenuItem(
+                      value: 'updated_asc',
+                      child: Text('Oldest Updated', style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),

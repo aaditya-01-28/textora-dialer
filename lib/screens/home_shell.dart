@@ -69,7 +69,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // 1. Handle active in-app dialed call first (from Leads, Agenda, Calls, Dashboard, or Push-to-Dial)
     await _checkActiveOutboundCall();
     // 2. Then scan carrier call log for any inbound, missed, or unlogged native-dialed calls
-    await _checkInboundCalls(delayMs: 400);
+    await _checkInboundCalls(delayMs: 850, forceServerRefresh: true);
   }
 
   Future<void> _checkActiveOutboundCall() async {
@@ -132,7 +132,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _checkInboundCalls({int delayMs = 1200}) async {
+  Future<void> _checkInboundCalls({
+    int delayMs = 1200,
+    bool forceServerRefresh = false,
+  }) async {
     if (_isCheckingInbound || _isInboundDialogOpen) return;
     _isCheckingInbound = true;
 
@@ -142,7 +145,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       }
       if (!mounted || _isInboundDialogOpen) return;
 
-      final queue = await TelephonyService().detectPendingInboundCalls();
+      final queue = await TelephonyService().detectPendingInboundCalls(
+        forceServerRefresh: forceServerRefresh,
+      );
       if (queue.isNotEmpty && mounted) {
         await _showInboundQueue(queue, 0);
       }

@@ -426,6 +426,15 @@ class ApiService {
     int syncedCount = 0;
 
     for (var item in unsynced) {
+      // Hold temporary SIM dialer drafts briefly so an active PostCallDialog can save cleanly first
+      if (item.leadId != null && item.remark == 'Captured from SIM dialer') {
+        try {
+          final ts = DateTime.parse(item.callTimestamp).toUtc();
+          if (DateTime.now().toUtc().difference(ts).inMinutes < 2) {
+            continue;
+          }
+        } catch (_) {}
+      }
       final ok = await syncCallLog(item);
       if (ok) syncedCount++;
     }

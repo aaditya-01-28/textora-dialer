@@ -365,12 +365,22 @@ class TelephonyService {
     } catch (_) {}
   }
 
-  bool _isAlreadyLoggedOnServer(LeadItem lead, int timestampEpoch, int duration) {
+  bool _isAlreadyLoggedOnServer(
+    LeadItem lead,
+    int timestampEpoch,
+    int duration, {
+    required bool isInbound,
+  }) {
     final leadSuffix = last10Digits(lead.phoneNumber);
     for (final sc in _cachedServerCalls) {
       final matchesLead = (sc.leadId != null && sc.leadId == lead.id) ||
           (leadSuffix.isNotEmpty && last10Digits(sc.phoneNumber) == leadSuffix);
       if (!matchesLead) continue;
+
+      final scIsInbound =
+          sc.logSource == 'inbound_sim' || sc.logSource == 'inbound_missed';
+      // An outbound attempt (e.g. RNR at 11:44) must never suppress a later inbound callback (e.g. 11:46)
+      if (scIsInbound != isInbound) continue;
 
       int scEpoch = 0;
       try {
@@ -379,8 +389,9 @@ class TelephonyService {
       if (scEpoch == 0) continue;
 
       final diffMs = (scEpoch - timestampEpoch).abs();
-      // Match same interaction window (±5 minutes) or matching duration within ±20 minutes
-      if (diffMs <= 5 * 60 * 1000) return true;
+      final sameConnectOutcome = (sc.durationSeconds > 0) == (duration > 0);
+      // Match same interaction window (±5 minutes) only if connection outcome agrees
+      if (sameConnectOutcome && diffMs <= 5 * 60 * 1000) return true;
       if (duration > 0 &&
           diffMs <= 20 * 60 * 1000 &&
           (sc.durationSeconds - duration).abs() <= 3) {
@@ -417,7 +428,9 @@ class TelephonyService {
   }
 
   /// Inspect Android CallLog for ALL un-logged incoming, missed, and native-dialed outgoing CRM calls
-  Future<List<Map<String, dynamic>>> detectPendingInboundCalls() async {
+  Future<List<Map<String, dynamic>>> detectPendingInboundCalls({
+    bool forceServerRefresh = false,
+  }) async {
     // Only pause background scan while an in-app call is actively in progress in background
     if (hasFreshActiveCall && WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
       return [];
@@ -438,7 +451,7 @@ class TelephonyService {
       await _ensureLeadCache();
       if (_cachedLeadBySuffix.isEmpty) return [];
 
-      await _ensureServerCallCache(force: prevCacheEmpty);
+      await _ensureServerCallCache(force: forceServerRefresh || prevCacheEmpty);
 
       final seenSignatures = <String>{};
 
@@ -485,7 +498,12 @@ class TelephonyService {
         final matchedLead = _cachedLeadBySuffix[suffix];
         if (matchedLead != null) {
           // Cross-check CRM server logs so already-disposed calls are never prompted twice
-          if (_isAlreadyLoggedOnServer(matchedLead, timestampEpoch, duration)) {
+          if (_isAlreadyLoggedOnServer(
+            matchedLead,
+            timestampEpoch,
+            duration,
+            isInbound: isInboundOrMissed,
+          )) {
             await _storage.markCallSignatureProcessed(signature);
             continue;
           }

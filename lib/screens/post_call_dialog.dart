@@ -63,8 +63,13 @@ class _PostCallDialogState extends State<PostCallDialog> {
   void initState() {
     super.initState();
     if (widget.isInbound) {
-      _disposition = 'Connected';
-      _remarkController.text = 'Customer called back after RNR';
+      if (widget.call.durationSeconds == 0) {
+        _disposition = 'RNR';
+        _remarkController.text = 'Missed inbound call from customer';
+      } else {
+        _disposition = 'Connected';
+        _remarkController.text = 'Customer called back';
+      }
     } else if (_isScheduledDemo) {
       _disposition = widget.call.durationSeconds > 0 ? 'Demo Done' : 'RNR';
     } else if (_isScheduledCallback) {
