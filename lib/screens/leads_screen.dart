@@ -36,6 +36,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     {'id': 'connected', 'label': 'Connected'},
     {'id': 'callback', 'label': 'Callbacks'},
     {'id': 'demos', 'label': 'Demos'},
+    {'id': 'demo_done', 'label': 'Demo Done'},
     {'id': 'deal', 'label': 'In Deal'},
     {'id': 'rnr', 'label': 'RNR'},
     {'id': 'rnr_1', 'label': 'RNR 1'},
@@ -67,7 +68,9 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
       case 'callback':
         return s.contains('callback');
       case 'demos':
-        return s.contains('demo');
+        return s.contains('demo') || l.isDemoDone;
+      case 'demo_done':
+        return s == 'demo_done' || l.isDemoDone;
       case 'deal':
         return s.contains('deal') || s == 'proposal_sent' || s == 'negotiation';
       case 'rnr':
@@ -113,6 +116,10 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
           if (map.containsKey(id)) {
             reordered.add(map[id]!);
             map.remove(id);
+            if (id == 'demos' && !saved.contains('demo_done') && map.containsKey('demo_done')) {
+              reordered.add(map['demo_done']!);
+              map.remove('demo_done');
+            }
             if (id == 'rnr') {
               for (final subId in const ['rnr_1', 'rnr_2', 'rnr_3', 'rnr_4']) {
                 if (!saved.contains(subId) && map.containsKey(subId)) {
@@ -742,6 +749,19 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                           ),
                         )
                       else ...[
+                        if (lead.isDemoDone && lead.status.toLowerCase() != 'demo_done')
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'DEMO DONE',
+                              style: TextStyle(color: Colors.teal, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         if (lead.rnrCount > 0)
                           Container(
                             margin: const EdgeInsets.only(right: 6),

@@ -19,6 +19,7 @@ class LeadItem {
   final String? assignedRepName;
   final int callLogsCount;
   final bool isInterested;
+  final bool isDemoDone;
 
   LeadItem({
     required this.id,
@@ -33,6 +34,7 @@ class LeadItem {
     required this.rnrCount,
     this.callLogsCount = 0,
     this.isInterested = false,
+    this.isDemoDone = false,
     this.preferredLanguage,
     this.address,
     this.secondaryPhone,
@@ -72,6 +74,7 @@ class LeadItem {
       assignedAt: json['assignedAt']?.toString() ?? json['assigned_at']?.toString() ?? json['firstAssignedAt']?.toString() ?? json['createdAt']?.toString(),
       assignedRepName: assignedRep?['fullName']?.toString() ?? json['assignedRepName']?.toString(),
       isInterested: json['isInterested'] == true || json['is_interested'] == true,
+      isDemoDone: json['isDemoDone'] == true || json['is_demo_done'] == true,
     );
   }
 
@@ -94,6 +97,7 @@ class LeadItem {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'assignedAt': assignedAt,
+      'isDemoDone': isDemoDone,
     };
   }
 
@@ -117,6 +121,8 @@ class LeadItem {
     String? updatedAt,
     String? assignedAt,
     String? assignedRepName,
+    bool? isInterested,
+    bool? isDemoDone,
   }) {
     return LeadItem(
       id: id ?? this.id,
@@ -130,6 +136,8 @@ class LeadItem {
       status: status ?? this.status,
       rnrCount: rnrCount ?? this.rnrCount,
       callLogsCount: callLogsCount ?? this.callLogsCount,
+      isInterested: isInterested ?? this.isInterested,
+      isDemoDone: isDemoDone ?? this.isDemoDone,
       preferredLanguage: preferredLanguage ?? this.preferredLanguage,
       address: address ?? this.address,
       secondaryPhone: secondaryPhone ?? this.secondaryPhone,
