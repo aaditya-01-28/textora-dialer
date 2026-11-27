@@ -39,6 +39,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
   final _meetingLinkController = TextEditingController();
   DateTime? _scheduledDateTime;
   bool _isSaving = false;
+  bool _didSave = false;
   String? _errorMessage;
   bool _showAllDispositions = false;
 
@@ -229,6 +230,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
         remark: remark,
         isInterested: _isInterested || _disposition == 'Interested',
       );
+      _didSave = true;
       TelephonyService().clearCaches();
       TelephonyService().notifyCallCompleted();
       AgendaReminderService().refreshNow();
@@ -258,7 +260,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
       canPop: widget.isInbound && widget.call.durationSeconds == 0,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
-          widget.onDismissed?.call();
+          if (!_didSave) {
+            widget.onDismissed?.call();
+          }
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
@@ -344,7 +348,9 @@ class _PostCallDialogState extends State<PostCallDialog> {
                     ),
                     TextButton(
                       onPressed: () {
-                        widget.onDismissed?.call();
+                        if (!_didSave) {
+                          widget.onDismissed?.call();
+                        }
                         Navigator.of(context).pop();
                       },
                       style: TextButton.styleFrom(

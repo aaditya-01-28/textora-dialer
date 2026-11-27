@@ -182,21 +182,31 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           queueLabel: queueLabel,
           onDismissed: () async {
             await StorageService().markCallSignatureProcessed(signature);
-            // Talk-time protection: if any connected call is skipped, still log its exact talk time
+            // Talk-time protection: ONLY auto-log when explicitly Skipped AND not already logged manually on server
             if (call.durationSeconds > 0) {
               try {
-                await ApiService().disposeLead(
-                  leadId: lead.id,
-                  disposition: 'Connected',
-                  remark: isInboundCall
-                      ? 'Inbound call auto-logged (${call.durationSeconds}s talk time)'
-                      : 'Phone dialer call auto-logged (${call.durationSeconds}s talk time)',
-                  durationSeconds: call.durationSeconds,
-                  callTimestamp: call.callTimestamp,
-                  logSource: isInboundCall ? 'inbound_sim' : 'apk_manual',
+                final alreadyLogged = await TelephonyService().isCallAlreadyLoggedOnServer(
+                  lead,
+                  call,
+                  isInbound: isInboundCall,
+                  forceRefresh: true,
                 );
-                TelephonyService().clearCaches();
-                TelephonyService().notifyCallCompleted();
+                if (!alreadyLogged) {
+                  await ApiService().syncCallLog(CallSyncItem(
+                    id: call.id,
+                    leadId: lead.id,
+                    phoneNumber: call.phoneNumber,
+                    durationSeconds: call.durationSeconds,
+                    disposition: 'Connected',
+                    callTimestamp: call.callTimestamp,
+                    remark: isInboundCall
+                        ? 'Inbound call auto-logged (${call.durationSeconds}s talk time)'
+                        : 'Phone dialer call auto-logged (${call.durationSeconds}s talk time)',
+                    logSource: isInboundCall ? 'inbound_sim' : 'apk_manual',
+                  ));
+                  TelephonyService().clearCaches();
+                  TelephonyService().notifyCallCompleted();
+                }
               } catch (_) {}
             }
           },

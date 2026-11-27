@@ -365,6 +365,26 @@ class TelephonyService {
     } catch (_) {}
   }
 
+  Future<bool> isCallAlreadyLoggedOnServer(
+    LeadItem lead,
+    CallSyncItem call, {
+    bool isInbound = false,
+    bool forceRefresh = true,
+  }) async {
+    await _ensureServerCallCache(force: forceRefresh);
+    int callEpoch = 0;
+    try {
+      callEpoch = DateTime.parse(call.callTimestamp).toUtc().millisecondsSinceEpoch;
+    } catch (_) {}
+    if (callEpoch == 0) callEpoch = DateTime.now().toUtc().millisecondsSinceEpoch;
+    return _isAlreadyLoggedOnServer(
+      lead,
+      callEpoch,
+      call.durationSeconds,
+      isInbound: isInbound,
+    );
+  }
+
   bool _isAlreadyLoggedOnServer(
     LeadItem lead,
     int timestampEpoch,
