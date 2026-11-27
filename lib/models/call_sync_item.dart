@@ -12,6 +12,7 @@ class CallSyncItem {
   final String? leadCompanyName;
   final String? leadStatus;
   final bool isInterested;
+  final int? rnrAttempt;
   bool isSynced;
 
   CallSyncItem({
@@ -28,6 +29,7 @@ class CallSyncItem {
     this.leadCompanyName,
     this.leadStatus,
     this.isInterested = false,
+    this.rnrAttempt,
     this.isSynced = false,
   });
 
@@ -47,6 +49,7 @@ class CallSyncItem {
       leadCompanyName: leadMap?['companyName']?.toString() ?? json['leadCompanyName']?.toString(),
       leadStatus: leadMap?['status']?.toString() ?? json['leadStatus']?.toString(),
       isInterested: json['isInterested'] == true,
+      rnrAttempt: json['rnrAttempt'] is num ? (json['rnrAttempt'] as num).toInt() : null,
       isSynced: json['isSynced'] ?? false,
     );
   }
@@ -66,6 +69,7 @@ class CallSyncItem {
       if (leadCompanyName != null) 'leadCompanyName': leadCompanyName,
       if (leadStatus != null) 'leadStatus': leadStatus,
       'isInterested': isInterested,
+      if (rnrAttempt != null) 'rnrAttempt': rnrAttempt,
       'isSynced': isSynced,
     };
   }

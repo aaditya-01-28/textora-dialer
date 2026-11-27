@@ -229,10 +229,11 @@ class ApiService {
     }
   }
 
-  /// Fetch Call Logs from CRM Backend (with optional dateFrom, dateTo, search)
+  /// Fetch Call Logs from CRM Backend (with optional dateFrom, dateTo, disposition, search)
   Future<List<CallSyncItem>> getCallLogs({
     String? dateFrom,
     String? dateTo,
+    String? disposition,
     String? search,
     int limit = 100,
   }) async {
@@ -241,6 +242,7 @@ class ApiService {
       'limit': limit.toString(),
       if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
       if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+      if (disposition != null && disposition.isNotEmpty) 'disposition': disposition,
       if (search != null && search.isNotEmpty) 'search': search,
     };
     final uri = Uri.parse('$baseUrl/api/calls').replace(queryParameters: queryParams);

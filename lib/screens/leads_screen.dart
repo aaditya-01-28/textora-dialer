@@ -37,6 +37,10 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
     {'id': 'demos', 'label': 'Demos'},
     {'id': 'deal', 'label': 'In Deal'},
     {'id': 'rnr', 'label': 'RNR'},
+    {'id': 'rnr_1', 'label': 'RNR 1'},
+    {'id': 'rnr_2', 'label': 'RNR 2'},
+    {'id': 'rnr_3', 'label': 'RNR 3'},
+    {'id': 'rnr_4', 'label': 'RNR 4+'},
     {'id': 'already_using', 'label': 'Already Using'},
     {'id': 'future_requirement', 'label': 'Future Req'},
     {'id': 'already_purchased', 'label': 'Purchased Other'},
@@ -67,6 +71,14 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
         return s.contains('deal') || s == 'proposal_sent' || s == 'negotiation';
       case 'rnr':
         return s == 'rnr';
+      case 'rnr_1':
+        return s == 'rnr' && l.rnrCount == 1;
+      case 'rnr_2':
+        return s == 'rnr' && l.rnrCount == 2;
+      case 'rnr_3':
+        return s == 'rnr' && l.rnrCount == 3;
+      case 'rnr_4':
+        return s == 'rnr' && l.rnrCount >= 4;
       case 'already_using':
         return s == 'already_using' || s == 'already using';
       case 'future_requirement':
@@ -100,6 +112,14 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
           if (map.containsKey(id)) {
             reordered.add(map[id]!);
             map.remove(id);
+            if (id == 'rnr') {
+              for (final subId in const ['rnr_1', 'rnr_2', 'rnr_3', 'rnr_4']) {
+                if (!saved.contains(subId) && map.containsKey(subId)) {
+                  reordered.add(map[subId]!);
+                  map.remove(subId);
+                }
+              }
+            }
           }
         }
         reordered.addAll(map.values);

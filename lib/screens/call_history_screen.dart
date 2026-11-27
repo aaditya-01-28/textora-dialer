@@ -30,8 +30,64 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   // Search & Filter state
   final TextEditingController _searchController = TextEditingController();
   String _selectedDateFilter = 'All'; // 'All', 'Today', 'Yesterday', '7Days', 'Custom'
+  String _selectedDispositionFilter = 'All';
   DateTime? _customDate;
   String _sortBy = 'newest'; // 'newest', 'oldest', 'duration_desc', 'duration_asc'
+  Map<String, int> _rnrAttemptByKey = {};
+
+  static const List<Map<String, String>> _dispositionFilters = [
+    {'id': 'All', 'label': 'All Calls'},
+    {'id': 'RNR', 'label': 'RNR'},
+    {'id': 'RNR1', 'label': 'RNR 1'},
+    {'id': 'RNR2', 'label': 'RNR 2'},
+    {'id': 'RNR3', 'label': 'RNR 3'},
+    {'id': 'RNR4', 'label': 'RNR 4+'},
+    {'id': 'Connected', 'label': 'Connected'},
+    {'id': 'Interested', 'label': 'Interested 🔥'},
+    {'id': 'Callback', 'label': 'Callback'},
+    {'id': 'Demo Scheduled', 'label': 'Demo'},
+    {'id': 'Not Interested', 'label': 'Not Interested'},
+    {'id': 'Invalid', 'label': 'Invalid'},
+  ];
+
+  bool _isRnrDisposition(String disposition) {
+    final d = disposition.toLowerCase().trim();
+    return d == 'rnr' ||
+        d.contains('ringing') ||
+        d.contains('no response') ||
+        d.contains('no answer');
+  }
+
+  String _callIdentityKey(CallSyncItem call) =>
+      call.id.isNotEmpty ? call.id : '${call.phoneNumber}_${call.callTimestamp}';
+
+  void _rebuildRnrAttemptMap() {
+    final rnrCalls = _allCalls.where((c) => _isRnrDisposition(c.disposition)).toList();
+    rnrCalls.sort((a, b) => a.callTimestamp.compareTo(b.callTimestamp));
+
+    final Map<String, int> leadCounter = {};
+    final Map<String, int> map = {};
+    for (final call in rnrCalls) {
+      final key = _callIdentityKey(call);
+      if (call.rnrAttempt != null && call.rnrAttempt! > 0) {
+        map[key] = call.rnrAttempt!;
+        continue;
+      }
+      final digits = call.phoneNumber.replaceAll(RegExp(r'\D'), '');
+      final phoneKey = digits.length >= 10 ? digits.substring(digits.length - 10) : digits;
+      final groupKey = (call.leadId != null && call.leadId!.isNotEmpty) ? call.leadId! : phoneKey;
+      final nextCount = (leadCounter[groupKey] ?? 0) + 1;
+      leadCounter[groupKey] = nextCount;
+      map[key] = nextCount;
+    }
+    _rnrAttemptByKey = map;
+  }
+
+  int? _getRnrAttempt(CallSyncItem call) {
+    if (!_isRnrDisposition(call.disposition)) return null;
+    if (call.rnrAttempt != null && call.rnrAttempt! > 0) return call.rnrAttempt;
+    return _rnrAttemptByKey[_callIdentityKey(call)];
+  }
 
   @override
   void initState() {
@@ -120,6 +176,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
     if (mounted) {
       setState(() {
         _allCalls = merged;
+        _rebuildRnrAttemptMap();
         _applyFiltersAndSort();
         _isLoading = false;
       });
@@ -190,6 +247,61 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
             disposition.contains(searchLower);
 
         if (!matches) return false;
+      }
+
+      // Disposition & RNR1..4 filtering
+      if (_selectedDispositionFilter != 'All') {
+        final dispLower = call.disposition.toLowerCase().trim();
+        final isRnr = _isRnrDisposition(call.disposition);
+        final attempt = _getRnrAttempt(call);
+        switch (_selectedDispositionFilter) {
+          case 'RNR':
+            if (!isRnr) return false;
+            break;
+          case 'RNR1':
+            if (!isRnr || attempt != 1) return false;
+            break;
+          case 'RNR2':
+            if (!isRnr || attempt != 2) return false;
+            break;
+          case 'RNR3':
+            if (!isRnr || attempt != 3) return false;
+            break;
+          case 'RNR4':
+            if (!isRnr || attempt == null || attempt < 4) return false;
+            break;
+          case 'Connected':
+            if (isRnr || dispLower == 'invalid') return false;
+            if (call.durationSeconds <= 0 &&
+                !dispLower.contains('connected') &&
+                !dispLower.contains('interested') &&
+                !dispLower.contains('callback') &&
+                !dispLower.contains('demo')) {
+              return false;
+            }
+            break;
+          case 'Interested':
+            if (!call.isInterested &&
+                dispLower != 'interested' &&
+                !dispLower.contains('callback') &&
+                !dispLower.contains('demo') &&
+                !dispLower.contains('future')) {
+              return false;
+            }
+            break;
+          case 'Callback':
+            if (!dispLower.contains('callback')) return false;
+            break;
+          case 'Demo Scheduled':
+            if (!dispLower.contains('demo')) return false;
+            break;
+          case 'Not Interested':
+            if (!dispLower.contains('not interested')) return false;
+            break;
+          case 'Invalid':
+            if (!dispLower.contains('invalid')) return false;
+            break;
+        }
       }
 
       return true;
@@ -626,6 +738,64 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+
+                // Disposition & RNR1..4 Filter Row
+                SizedBox(
+                  height: 32,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _dispositionFilters.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 6),
+                    itemBuilder: (context, idx) {
+                      final f = _dispositionFilters[idx];
+                      final id = f['id']!;
+                      final isSelected = _selectedDispositionFilter == id;
+                      final isRnrChip = id.startsWith('RNR');
+                      final activeColor = isRnrChip ? const Color(0xFFD97706) : const Color(0xFF059669);
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedDispositionFilter = id;
+                            _applyFiltersAndSort();
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? activeColor
+                                : (isRnrChip
+                                    ? Colors.amber.withValues(alpha: isDark ? 0.14 : 0.12)
+                                    : chipBg),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected
+                                  ? activeColor
+                                  : (isRnrChip
+                                      ? Colors.amber.withValues(alpha: 0.45)
+                                      : borderColor),
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            f['label']!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isRnrChip
+                                      ? (isDark ? Colors.amber[300] : Colors.amber[900])
+                                      : subColor),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -741,9 +911,15 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                             ],
                                           ),
                                           const SizedBox(height: 2),
-                                          Text(
-                                            '${call.isInterested && call.disposition != 'Interested' ? '🔥 Interested • ' : ''}${call.disposition} • Talk Time: ${_formatDuration(call.durationSeconds)}',
-                                            style: TextStyle(color: subColor, fontSize: 12),
+                                          Builder(
+                                            builder: (_) {
+                                              final rnrNum = _getRnrAttempt(call);
+                                              final rnrTag = rnrNum != null ? ' • RNR $rnrNum' : '';
+                                              return Text(
+                                                '${call.isInterested && call.disposition != 'Interested' ? '🔥 Interested • ' : ''}${call.disposition}$rnrTag • Talk Time: ${_formatDuration(call.durationSeconds)}',
+                                                style: TextStyle(color: subColor, fontSize: 12),
+                                              );
+                                            },
                                           ),
                                           if (call.remark != null && call.remark!.isNotEmpty) ...[
                                             const SizedBox(height: 4),
