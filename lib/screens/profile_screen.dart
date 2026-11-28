@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_profile.dart';
+import '../services/agenda_reminder_service.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/telephony_service.dart';
 import '../services/theme_service.dart';
 import '../services/update_service.dart';
 import 'login_screen.dart';
@@ -342,6 +344,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirm == true) {
+      AgendaReminderService().stopListening();
+      TelephonyService().stopPushToDialListener();
+      TelephonyService().clearCaches();
+      await TelephonyService().clearCallState();
       await _storage.clearAuth();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -403,35 +409,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color: const Color(0xFF10B981),
         onRefresh: () => _fetchLatestProfile(silent: false),
         child: ListView(
+        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         padding: const EdgeInsets.all(16),
         children: [
-          // 1. User Dossier Header Card with Avatar Photo & Camera Badge
+          // 1. User Dossier Header Card
           _buildUserHeaderCard(borderColor, isDark),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 2. Compact & Justified Organization & Role Details
+          // 2. Essential Account Details
           _buildCompactJustifiedDossier(borderColor, isDark),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           // 3. App Appearance & Theme Mode (System / Light / Dark)
           _buildThemeSelector(borderColor, isDark),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 4. User Level Authorization Matrix
-          _buildRolePermissionsCard(borderColor, isDark),
-          const SizedBox(height: 14),
-
-          // 5. Accessibility & Reading Controls
+          // 4. Accessibility & Reading Controls
           _buildAccessibilitySection(borderColor, isDark),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 6. Account Security Actions (Password reset & Privacy Shield)
+          // 5. Password Reset & App Update
           _buildSecurityCard(borderColor, isDark),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 7. App Version & In-App Auto-Update Card
           _buildAppUpdateCard(borderColor, isDark),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
           // 8. Sign Out Button
           SizedBox(
@@ -551,45 +553,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Account Specifications',
+            'Account Details',
             style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _buildJustifiedRow('Organization', _currentUser.tenantName, icon: Icons.business_rounded, isDark: isDark),
           Divider(color: dividerColor, height: 16),
-          _buildJustifiedRow('Designation', _currentUser.roleDisplayName, icon: Icons.badge_outlined, isDark: isDark),
+          _buildJustifiedRow('Role', _currentUser.roleDisplayName, icon: Icons.badge_outlined, isDark: isDark),
           Divider(color: dividerColor, height: 16),
-          _buildJustifiedRow('Service Tier', _currentUser.planTier ?? 'Enterprise Suite', icon: Icons.workspace_premium_rounded, isDark: isDark),
+          _buildJustifiedRow('Phone', _currentUser.phoneNumber?.isNotEmpty == true ? _currentUser.phoneNumber! : 'Not specified', icon: Icons.phone_outlined, isDark: isDark),
           Divider(color: dividerColor, height: 16),
-          _buildJustifiedRow('Contact Phone', _currentUser.phoneNumber?.isNotEmpty == true ? _currentUser.phoneNumber! : 'Not specified', icon: Icons.phone_outlined, isDark: isDark),
-          Divider(color: dividerColor, height: 16),
-          _buildJustifiedRow('Assigned Language', _formatLanguage(_currentUser.language), icon: Icons.language_rounded, isDark: isDark),
-          Divider(color: dividerColor, height: 16),
-          _buildJustifiedRow('System Status', 'Active & Synchronized', icon: Icons.check_circle_outline_rounded, valueColor: const Color(0xFF10B981), isDark: isDark),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, size: 14, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Profile details can only be updated via the web app (crm.textorasms.com). Updates sync here automatically in real time.',
-                    style: TextStyle(
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      fontSize: 11,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildJustifiedRow('Language', _formatLanguage(_currentUser.language), icon: Icons.language_rounded, isDark: isDark),
         ],
       ),
     );
@@ -638,7 +612,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final currentMode = themeService.themeModeNotifier.value;
     final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
     final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -655,7 +628,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Icon(Icons.palette_outlined, color: Color(0xFF10B981), size: 18),
               const SizedBox(width: 8),
               Text(
-                'App Theme & Appearance',
+                'Appearance',
                 style: TextStyle(
                   color: titleColor,
                   fontWeight: FontWeight.bold,
@@ -664,12 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Choose your preferred visual presentation for day or night operation:',
-            style: TextStyle(color: subColor, fontSize: 12),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Row(
             children: [
               _buildThemeOption(
@@ -763,71 +731,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// Role Permissions & Authorization Info
-  Widget _buildRolePermissionsCard(Color borderColor, bool isDark) {
-    final isManager = _currentUser.isManagerOrAbove;
-    final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
-    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: 1.2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.shield_rounded, color: Color(0xFF10B981), size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Access Level & Permissions',
-                style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _buildPermissionItem('Direct SIM Dialing & Call Duration Capture', true, isDark),
-          _buildPermissionItem('Lead Profile Editing & WhatsApp Outreach', true, isDark),
-          _buildPermissionItem('Call Disposition Logging & Auto Offline Sync', true, isDark),
-          _buildPermissionItem('Team Lead Distribution & Analytics', isManager, isDark),
-          _buildPermissionItem('Organization User Administration', _currentUser.role.contains('admin'), isDark),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPermissionItem(String text, bool granted, bool isDark) {
-    final grantedColor = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155);
-    final disabledColor = isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            granted ? Icons.check_circle_rounded : Icons.cancel_outlined,
-            color: granted ? const Color(0xFF10B981) : const Color(0xFF475569),
-            size: 15,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: granted ? grantedColor : disabledColor,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -971,7 +874,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Icon(Icons.lock_outline_rounded, color: Color(0xFF10B981), size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    'Security & Authentication',
+                    'Password & Security',
                     style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ],
@@ -985,11 +888,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Hardware AES-256 KeyStore token storage is active. Direct HTTPS communication with Zero 3rd-Party Tracking.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 11, height: 1.4),
           ),
         ],
       ),
@@ -1066,11 +964,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'New releases and features are automatically verified and updated in-app from crm.textorasms.com without manual APK downloads.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 11, height: 1.4),
           ),
         ],
       ),

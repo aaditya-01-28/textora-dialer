@@ -33,7 +33,28 @@ class AgendaReminderService {
   final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
 
   Function(Map<String, dynamic> task, String reminderType)? onForegroundReminder;
+  VoidCallback? onDismissForegroundReminder;
   VoidCallback? onOpenAgendaRequested;
+  String? _activeForegroundTaskId;
+
+  /// Dismisses active in-app and system notifications for a completed/rescheduled task.
+  Future<void> markTaskResolved(String taskId) async {
+    _notified5MinIds.add(taskId);
+    _notifiedNowIds.add(taskId);
+    _notifiedOverdueIds.add(taskId);
+    if (_activeForegroundTaskId == taskId) {
+      _activeForegroundTaskId = null;
+      onDismissForegroundReminder?.call();
+    }
+    try {
+      await _platformChannel.invokeMethod('cancelAgendaNotification', {
+        'notificationId': (taskId.hashCode.abs() % 40000) + 10000,
+      });
+      await _platformChannel.invokeMethod('cancelAgendaNotification', {
+        'notificationId': (taskId.hashCode.abs() % 40000) + 50000,
+      });
+    } catch (_) {}
+  }
 
   Future<void> _ensureNotificationPermission() async {
     if (_permissionChecked) return;
@@ -94,6 +115,10 @@ class AgendaReminderService {
     _isRunning = false;
     _timer?.cancel();
     _timer = null;
+    _notified5MinIds.clear();
+    _notifiedNowIds.clear();
+    _notifiedOverdueIds.clear();
+    pendingCountNotifier.value = 0;
   }
 
   Future<void> _checkReminders() async {
@@ -167,6 +192,7 @@ class AgendaReminderService {
               });
             } catch (_) {}
 
+            _activeForegroundTaskId = id;
             onForegroundReminder?.call(task, '5min');
           }
         }
@@ -192,6 +218,7 @@ class AgendaReminderService {
               });
             } catch (_) {}
 
+            _activeForegroundTaskId = id;
             onForegroundReminder?.call(task, 'now');
           }
         }

@@ -116,18 +116,24 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
   ];
 
   static const List<String> _serviceOptions = [
-    'WhatsApp API',
+    'WhatsApp API (Meta - Marketing)',
+    'WhatsApp API (Meta - Utility)',
     'Bulk WhatsApp',
     'Virtual WhatsApp',
-    'Bulk SMS',
-    'RCS Messaging',
-    'Transactional SMS',
     'Promotional SMS',
-    'Voice SMS / OBD',
-    'OTP API',
-    'DLT & SMS Gateway',
-    'Combo WA+SMS',
-    'Reseller',
+    'Transactional SMS',
+    'Voice SMS (15 Sec)',
+    'Voice SMS (30 Sec)',
+    'RCS (Marketing)',
+    'RCS (Utility)',
+    'Reseller Panel',
+    'DLT Registration',
+    'MSME',
+    'Database',
+    'Website',
+    'CRM',
+    'HRMS',
+    'Email Marketing',
   ];
 
   static const List<String> _languageOptions = [

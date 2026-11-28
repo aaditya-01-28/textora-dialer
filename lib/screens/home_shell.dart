@@ -260,6 +260,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void _startAgendaReminders() {
+    AgendaReminderService().onDismissForegroundReminder = () {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+      }
+    };
     AgendaReminderService().startListening(
       onOpenAgenda: () {
         if (mounted) {
@@ -286,10 +291,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         final is5Min = type == '5min';
         final title = is5Min ? '⏰ In 5 Min' : '🔔 Time Now!';
 
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: is5Min ? const Color(0xFFD97706) : const Color(0xFF059669),
-            duration: const Duration(seconds: 12),
+            duration: const Duration(seconds: 6),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             content: Column(
@@ -337,7 +343,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                         label: 'JOIN',
                         textColor: Colors.white,
                         onPressed: () {
-                          launchUrl(Uri.parse(meetingLink), mode: LaunchMode.externalApplication);
+                          final uri = Uri.tryParse(meetingLink.trim());
+                          if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http')) {
+                            launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
                         },
                       )
                     : null,

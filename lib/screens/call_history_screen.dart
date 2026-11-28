@@ -29,10 +29,11 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
   // Search & Filter state
   final TextEditingController _searchController = TextEditingController();
-  String _selectedDateFilter = 'All'; // 'All', 'Today', 'Yesterday', '7Days', 'Custom'
+  String _selectedDateFilter = 'Today'; // Default to Today
   String _selectedDispositionFilter = 'All';
   DateTime? _customDate;
-  String _sortBy = 'newest'; // 'newest', 'oldest', 'duration_desc', 'duration_asc'
+  final Map<String, String> _sortByTab = {}; // Independent sort per tab
+  String get _currentSortBy => _sortByTab[_selectedDispositionFilter] ?? 'newest';
   Map<String, int> _rnrAttemptByKey = {};
 
   static const List<Map<String, String>> _dispositionFilters = [
@@ -309,7 +310,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
     // Sort order
     result.sort((a, b) {
-      switch (_sortBy) {
+      switch (_currentSortBy) {
         case 'oldest':
           return a.callTimestamp.compareTo(b.callTimestamp);
         case 'duration_desc':
@@ -684,11 +685,12 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
                     // Sort By Dropdown Button
                     PopupMenuButton<String>(
-                      initialValue: _sortBy,
+                      key: ValueKey('calls_sort_$_selectedDispositionFilter'),
+                      initialValue: _currentSortBy,
                       tooltip: 'Sort calls',
                       onSelected: (val) {
                         setState(() {
-                          _sortBy = val;
+                          _sortByTab[_selectedDispositionFilter] = val;
                           _applyFiltersAndSort();
                         });
                       },
@@ -707,7 +709,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                             const Icon(Icons.sort, size: 16, color: Color(0xFF10B981)),
                             const SizedBox(width: 4),
                             Text(
-                              _getSortLabel(_sortBy),
+                              _getSortLabel(_currentSortBy),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -846,6 +848,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                         ),
                       )
                     : ListView.separated(
+                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                         itemCount: _filteredCalls.length,
                         separatorBuilder: (context, index) => const SizedBox(height: 10),

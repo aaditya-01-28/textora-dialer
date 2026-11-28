@@ -307,48 +307,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
             fit: BoxFit.contain,
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.user.tenantName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF10B981),
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    _appVersion,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Color(0xFF10B981),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
             Text(
-              'Sales Performance Dashboard',
+              'Dashboard',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 fontWeight: FontWeight.bold,
                 color: titleColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                _appVersion,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF10B981),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -417,12 +399,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: cardBgSubtle,
         onRefresh: () => _loadDashboard(silent: true),
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           children: [
-            // User Role Level Banner (Accessibility & Status)
-            _buildUserLevelCard(isDark, cardBg, cardBorder, titleColor, subColor),
-            const SizedBox(height: 12),
-
             // Manager / Admin Level: Team View Selector
             _buildTeamScopeSelector(isDark, cardBg, cardBorder, titleColor, subColor),
 
@@ -670,117 +649,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       },
-    );
-  }
-
-  /// User Access Level & Status Card
-  Widget _buildUserLevelCard(
-    bool isDark,
-    Color cardBg,
-    Color cardBorder,
-    Color titleColor,
-    Color subColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.08 : 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: const Color(0xFF059669),
-            child: Text(
-              widget.user.fullName.isNotEmpty ? widget.user.fullName[0].toUpperCase() : 'U',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.user.fullName,
-                  style: TextStyle(
-                    color: titleColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF10B981), width: 0.8),
-                      ),
-                      child: Text(
-                        widget.user.roleLevelBadge,
-                        style: const TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        widget.user.roleDisplayName,
-                        style: TextStyle(color: subColor, fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3), width: 0.8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 12),
-                          SizedBox(width: 5),
-                          Text(
-                            'Web CRM Linked • Push-to-Dial Active',
-                            style: TextStyle(
-                              color: Color(0xFF059669),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -27,7 +27,8 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
   Timer? _autoSyncTimer;
 
   String _selectedFilter = 'all';
-  String _sortBy = 'newest'; // 'newest', 'oldest', 'updated_desc', 'updated_asc'
+  final Map<String, String> _sortByTab = {}; // Independent sort order per tab
+  String get _currentSortBy => _sortByTab[_selectedFilter] ?? 'newest';
 
   static const List<Map<String, String>> _defaultFilters = [
     {'id': 'all', 'label': 'All'},
@@ -169,7 +170,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
         : _leads.where((l) => _isLeadMatchingFilter(l, _selectedFilter)).toList();
 
     list.sort((a, b) {
-      switch (_sortBy) {
+      switch (_currentSortBy) {
         case 'oldest':
           final aTs = _parseEpoch(a.assignedAt ?? a.createdAt);
           final bTs = _parseEpoch(b.assignedAt ?? b.createdAt);
@@ -387,9 +388,10 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 PopupMenuButton<String>(
-                  initialValue: _sortBy,
+                  key: ValueKey('sort_$_selectedFilter'),
+                  initialValue: _currentSortBy,
                   tooltip: 'Sort leads',
-                  onSelected: (val) => setState(() => _sortBy = val),
+                  onSelected: (val) => setState(() => _sortByTab[_selectedFilter] = val),
                   color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   child: Container(
@@ -405,7 +407,7 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                         const Icon(Icons.sort, size: 14, color: Color(0xFF10B981)),
                         const SizedBox(width: 4),
                         Text(
-                          _getSortLabel(_sortBy),
+                          _getSortLabel(_currentSortBy),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -496,12 +498,13 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                             onRefresh: _loadLeads,
                             color: const Color(0xFF10B981),
                             child: ListView.separated(
+                              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                               padding: const EdgeInsets.all(16),
                               itemCount: filtered.length,
                               separatorBuilder: (context, index) => const SizedBox(height: 10),
                               itemBuilder: (context, index) {
                                 final lead = filtered[index];
-                                return _buildLeadCard(lead, isDark);
+                                return RepaintBoundary(child: _buildLeadCard(lead, isDark));
                               },
                             ),
                           ),

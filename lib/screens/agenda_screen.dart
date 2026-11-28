@@ -29,6 +29,7 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
   List<Map<String, dynamic>> _upcoming = [];
   List<Map<String, dynamic>> _unconfirmed = [];
   final Set<String> _busyTaskIds = {};
+  String _selectedAgendaTab = 'all'; // 'all', 'overdue', 'today', 'upcoming', 'unconfirmed'
   Timer? _refreshTimer;
 
   @override
@@ -104,6 +105,8 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
     setState(() => _busyTaskIds.remove(taskId));
 
     if (ok) {
+      await AgendaReminderService().markTaskResolved(taskId);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Agenda task marked as completed ✅'),
@@ -277,83 +280,177 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
                           ),
                         ],
                       )
-                    : ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    : Column(
                         children: [
-                          if (_overdue.isNotEmpty) ...[
-                            _buildSectionHeader(
-                              'OVERDUE (${_overdue.length})',
-                              Colors.redAccent,
-                              Icons.warning_amber_rounded,
+                          // Top Quick Filter Bar (lets user jump straight to Unconfirmed Time without scrolling)
+                          Container(
+                            height: 44,
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              children: [
+                                _buildAgendaTabPill('all', 'All', totalDue, const Color(0xFF10B981), isDark, cardBg, cardBorder, subColor),
+                                const SizedBox(width: 8),
+                                _buildAgendaTabPill('unconfirmed', 'Unconfirmed', _unconfirmed.length, const Color(0xFFF59E0B), isDark, cardBg, cardBorder, subColor),
+                                const SizedBox(width: 8),
+                                _buildAgendaTabPill('overdue', 'Overdue', _overdue.length, Colors.redAccent, isDark, cardBg, cardBorder, subColor),
+                                const SizedBox(width: 8),
+                                _buildAgendaTabPill('today', 'Today', _today.length, const Color(0xFF10B981), isDark, cardBg, cardBorder, subColor),
+                                const SizedBox(width: 8),
+                                _buildAgendaTabPill('upcoming', 'Upcoming', _upcoming.length, const Color(0xFF3B82F6), isDark, cardBg, cardBorder, subColor),
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            ..._overdue.map((t) => _buildTaskCard(
-                                  t,
-                                  accent: Colors.redAccent,
-                                  isDark: isDark,
-                                  cardBg: cardBg,
-                                  cardBorder: cardBorder,
-                                  titleColor: titleColor,
-                                  subColor: subColor,
-                                )),
-                            const SizedBox(height: 16),
-                          ],
-                          if (_today.isNotEmpty) ...[
-                            _buildSectionHeader(
-                              "TODAY'S SCHEDULE (${_today.length})",
-                              const Color(0xFF10B981),
-                              Icons.today_rounded,
+                          ),
+                          Expanded(
+                            child: _buildFilteredAgendaList(
+                              isDark: isDark,
+                              cardBg: cardBg,
+                              cardBorder: cardBorder,
+                              titleColor: titleColor,
+                              subColor: subColor,
                             ),
-                            const SizedBox(height: 8),
-                            ..._today.map((t) => _buildTaskCard(
-                                  t,
-                                  accent: const Color(0xFF10B981),
-                                  isDark: isDark,
-                                  cardBg: cardBg,
-                                  cardBorder: cardBorder,
-                                  titleColor: titleColor,
-                                  subColor: subColor,
-                                )),
-                            const SizedBox(height: 16),
-                          ],
-                          if (_upcoming.isNotEmpty) ...[
-                            _buildSectionHeader(
-                              'UPCOMING (${_upcoming.length})',
-                              const Color(0xFF3B82F6),
-                              Icons.calendar_month_rounded,
-                            ),
-                            const SizedBox(height: 8),
-                            ..._upcoming.map((t) => _buildTaskCard(
-                                  t,
-                                  accent: const Color(0xFF3B82F6),
-                                  isDark: isDark,
-                                  cardBg: cardBg,
-                                  cardBorder: cardBorder,
-                                  titleColor: titleColor,
-                                  subColor: subColor,
-                                )),
-                            const SizedBox(height: 16),
-                          ],
-                          if (_unconfirmed.isNotEmpty) ...[
-                            _buildSectionHeader(
-                              'UNCONFIRMED TIME (${_unconfirmed.length})',
-                              const Color(0xFFF59E0B),
-                              Icons.schedule_rounded,
-                            ),
-                            const SizedBox(height: 8),
-                            ..._unconfirmed.map((t) => _buildTaskCard(
-                                  t,
-                                  accent: const Color(0xFFF59E0B),
-                                  isDark: isDark,
-                                  cardBg: cardBg,
-                                  cardBorder: cardBorder,
-                                  titleColor: titleColor,
-                                  subColor: subColor,
-                                )),
-                          ],
+                          ),
                         ],
                       ),
       ),
+    );
+  }
+
+  Widget _buildAgendaTabPill(
+    String tabId,
+    String label,
+    int count,
+    Color accent,
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color subColor,
+  ) {
+    final isSelected = _selectedAgendaTab == tabId;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedAgendaTab = tabId),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? accent : cardBg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isSelected ? accent : cardBorder,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                color: isSelected ? Colors.white : subColor,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.22)
+                    : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : subColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilteredAgendaList({
+    required bool isDark,
+    required Color cardBg,
+    required Color cardBorder,
+    required Color titleColor,
+    required Color subColor,
+  }) {
+    final List<Widget> items = [];
+
+    void addSection(
+      String title,
+      Color accent,
+      IconData icon,
+      List<Map<String, dynamic>> list,
+    ) {
+      if (list.isEmpty) return;
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 8),
+          child: _buildSectionHeader(title, accent, icon),
+        ),
+      );
+      for (final t in list) {
+        items.add(
+          RepaintBoundary(
+            child: _buildTaskCard(
+              t,
+              accent: accent,
+              isDark: isDark,
+              cardBg: cardBg,
+              cardBorder: cardBorder,
+              titleColor: titleColor,
+              subColor: subColor,
+            ),
+          ),
+        );
+      }
+      items.add(const SizedBox(height: 10));
+    }
+
+    if (_selectedAgendaTab == 'all' || _selectedAgendaTab == 'overdue') {
+      addSection('OVERDUE (${_overdue.length})', Colors.redAccent, Icons.warning_amber_rounded, _overdue);
+    }
+    if (_selectedAgendaTab == 'all' || _selectedAgendaTab == 'today') {
+      addSection("TODAY'S SCHEDULE (${_today.length})", const Color(0xFF10B981), Icons.today_rounded, _today);
+    }
+    if (_selectedAgendaTab == 'all' || _selectedAgendaTab == 'upcoming') {
+      addSection('UPCOMING (${_upcoming.length})', const Color(0xFF3B82F6), Icons.calendar_month_rounded, _upcoming);
+    }
+    if (_selectedAgendaTab == 'all' || _selectedAgendaTab == 'unconfirmed') {
+      addSection('UNCONFIRMED TIME (${_unconfirmed.length})', const Color(0xFFF59E0B), Icons.schedule_rounded, _unconfirmed);
+    }
+
+    if (items.isEmpty) {
+      return ListView(
+        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        padding: const EdgeInsets.all(32),
+        children: [
+          const SizedBox(height: 60),
+          Icon(Icons.event_available_rounded, size: 42, color: subColor.withValues(alpha: 0.6)),
+          const SizedBox(height: 12),
+          Text(
+            'No items in this section',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: titleColor),
+          ),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      itemCount: items.length,
+      itemBuilder: (_, idx) => items[idx],
     );
   }
 
@@ -545,7 +642,10 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () {
-                        launchUrl(Uri.parse(meetingLink), mode: LaunchMode.externalApplication);
+                        final uri = Uri.tryParse(meetingLink.trim());
+                        if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http')) {
+                          launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
                       },
                       icon: const Icon(Icons.videocam_rounded, size: 16),
                       label: const Text('Join', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -750,6 +850,8 @@ class _AgendaScreenState extends State<AgendaScreen> with WidgetsBindingObserver
                             });
                             if (!ctx.mounted) return;
                             if (ok) {
+                              await AgendaReminderService().markTaskResolved(id);
+                              if (!ctx.mounted) return;
                               Navigator.pop(ctx);
                               await _loadAgenda(silent: true);
                               AgendaReminderService().refreshNow();
