@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 import '../services/agenda_reminder_service.dart';
+import 'phone_log_sync_sheet.dart';
 import 'package:intl/intl.dart';
 
 class LeadProfileDialog extends StatefulWidget {
@@ -502,7 +503,10 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  if (_currentLead.status.toLowerCase() == 'rnr') ...[
+                  if (_currentLead.status.toLowerCase() == 'rnr' ||
+                      ((_currentLead.status.toLowerCase() == 'new' ||
+                              _currentLead.status.toLowerCase() == 'uncontacted') &&
+                          _currentLead.rnrCount > 0)) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -1145,9 +1149,36 @@ class _LeadProfileDialogState extends State<LeadProfileDialog> {
             children: [
               const Icon(Icons.history_rounded, color: Color(0xFF10B981), size: 18),
               const SizedBox(width: 8),
-              Text(
-                'Recent Calls with this Lead',
-                style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
+              Expanded(
+                child: Text(
+                  'Recent Calls with this Lead',
+                  style: TextStyle(color: titleColor, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () {
+                  PhoneLogSyncSheet.show(
+                    context,
+                    lead: _currentLead,
+                    onSynced: () {
+                      _fetchLeadDetails();
+                    },
+                  );
+                },
+                icon: const Icon(Icons.phone_in_talk_rounded, size: 14, color: Color(0xFF10B981)),
+                label: const Text(
+                  'Phone Logs',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),

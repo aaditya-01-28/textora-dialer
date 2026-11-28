@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_profile.dart';
 import '../models/lead_item.dart';
@@ -13,10 +14,23 @@ import 'storage_service.dart';
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
-  ApiService._internal();
+  ApiService._internal()
+      : _storage = StorageService(),
+        _client = http.Client();
 
-  final StorageService _storage = StorageService();
+  @visibleForTesting
+  ApiService.forTest({required http.Client client, StorageService? storage})
+      : _client = client,
+        _storage = storage ?? StorageService();
+
+  static const Duration _defaultTimeout = Duration(seconds: 15);
+  static const Duration _disposeTimeout = Duration(seconds: 20);
+
+  final StorageService _storage;
+  final http.Client _client;
   Future<bool>? _refreshInFlight;
+  bool _isFlushingQueue = false;
+  VoidCallback? onSessionExpired;
 
   Future<Map<String, String>> _headers() async {
     final token = await _storage.getToken();
@@ -27,20 +41,46 @@ class ApiService {
     };
   }
 
+  Future<void> _handleSessionExpired() async {
+    await _storage.clearAuth();
+    onSessionExpired?.call();
+  }
+
+  Future<http.Response> _sendWithAuthRetry(
+    Future<http.Response> Function(Map<String, String> headers) send, {
+    Duration timeout = _defaultTimeout,
+  }) async {
+    final headers = await _headers();
+    var res = await send(headers).timeout(timeout);
+    if (res.statusCode == 401) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        final newHeaders = await _headers();
+        res = await send(newHeaders).timeout(timeout);
+      }
+      if (res.statusCode == 401) {
+        await _handleSessionExpired();
+      }
+    }
+    return res;
+  }
+
   /// Login with CRM Credentials
   Future<UserProfile> login(String email, String password) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/auth/login');
 
-    final res = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email.trim(),
-        'password': password,
-        'client': 'mobile',
-      }),
-    );
+    final res = await _client
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': email.trim(),
+            'password': password,
+            'client': 'mobile',
+          }),
+        )
+        .timeout(_defaultTimeout);
 
     if (res.statusCode != 200) {
       final body = jsonDecode(res.body);
@@ -82,11 +122,13 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/auth/refresh');
 
     try {
-      final res = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refresh, 'client': 'mobile'}),
-      );
+      final res = await _client
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refreshToken': refresh, 'client': 'mobile'}),
+          )
+          .timeout(_defaultTimeout);
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -115,16 +157,7 @@ class ApiService {
     };
 
     final url = Uri.parse('$baseUrl/api/leads').replace(queryParameters: queryParams);
-    final headers = await _headers();
-
-    var res = await http.get(url, headers: headers);
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        final newHeaders = await _headers();
-        res = await http.get(url, headers: newHeaders);
-      }
-    }
+    final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -163,16 +196,8 @@ class ApiService {
   Future<LeadItem?> getNextQueueLead() async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads?queue=true');
-    final headers = await _headers();
 
-    var res = await http.get(url, headers: headers);
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        final newHeaders = await _headers();
-        res = await http.get(url, headers: newHeaders);
-      }
-    }
+    final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
     if (res.statusCode != 200) return null;
 
     final data = jsonDecode(res.body);
@@ -183,10 +208,9 @@ class ApiService {
   }
 
   /// Sync an Individual Call Log to the CRM
-  Future<bool> syncCallLog(CallSyncItem item) async {
+  Future<bool> syncCallLog(CallSyncItem item, {bool historicalSync = false}) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/calls');
-    final headers = await _headers();
 
     final payload = {
       if (item.leadId != null) 'leadId': item.leadId,
@@ -197,26 +221,14 @@ class ApiService {
       if (item.remark != null) 'remark': item.remark,
       if (item.recordingUrl != null) 'recordingUrl': item.recordingUrl,
       'logSource': item.logSource,
+      'isInterested': item.isInterested,
+      if (historicalSync) 'historicalSync': true,
     };
 
     try {
-      var res = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
+      final res = await _sendWithAuthRetry(
+        (h) => _client.post(url, headers: h, body: jsonEncode(payload)),
       );
-
-      if (res.statusCode == 401) {
-        final refreshed = await refreshToken();
-        if (refreshed) {
-          final newHeaders = await _headers();
-          res = await http.post(
-            url,
-            headers: newHeaders,
-            body: jsonEncode(payload),
-          );
-        }
-      }
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         await _storage.updateCallRecordSyncStatus(item.id, true);
@@ -226,6 +238,43 @@ class ApiService {
     } catch (_) {
       // Offline: keep as unsynced in local queue
       return false;
+    }
+  }
+
+  /// Sync Multiple Call Logs to CRM in a Single Batch
+  Future<int> batchSyncCallLogs(List<CallSyncItem> items, {bool historicalSync = true}) async {
+    if (items.isEmpty) return 0;
+    final baseUrl = await _storage.getBaseUrl();
+    final url = Uri.parse('$baseUrl/api/calls');
+    final payload = {
+      'calls': items
+          .map((item) => {
+                if (item.leadId != null) 'leadId': item.leadId,
+                'phoneNumber': item.phoneNumber,
+                'durationSeconds': item.durationSeconds,
+                'disposition': item.disposition,
+                'callTimestamp': item.callTimestamp,
+                if (item.remark != null) 'remark': item.remark,
+                if (item.recordingUrl != null) 'recordingUrl': item.recordingUrl,
+                'logSource': item.logSource,
+                'isInterested': item.isInterested,
+                if (historicalSync) 'historicalSync': true,
+              })
+          .toList(),
+    };
+
+    try {
+      final res = await _sendWithAuthRetry(
+        (h) => _client.post(url, headers: h, body: jsonEncode(payload)),
+        timeout: _disposeTimeout,
+      );
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final data = jsonDecode(res.body);
+        return (data['syncedCount'] is num) ? (data['syncedCount'] as num).toInt() : items.length;
+      }
+      return 0;
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -246,17 +295,9 @@ class ApiService {
       if (search != null && search.isNotEmpty) 'search': search,
     };
     final uri = Uri.parse('$baseUrl/api/calls').replace(queryParameters: queryParams);
-    final headers = await _headers();
 
     try {
-      var res = await http.get(uri, headers: headers);
-      if (res.statusCode == 401) {
-        final refreshed = await refreshToken();
-        if (refreshed) {
-          final newHeaders = await _headers();
-          res = await http.get(uri, headers: newHeaders);
-        }
-      }
+      final res = await _sendWithAuthRetry((h) => _client.get(uri, headers: h));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -275,19 +316,30 @@ class ApiService {
   Future<String?> uploadRecordingFile(String filePath, {String? leadId, String? callLogId}) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/telephony/recordings');
-    final token = await _storage.getToken();
 
-    try {
+    Future<http.Response> sendMultipart(String? token) async {
       final request = http.MultipartRequest('POST', url);
       if (token != null) request.headers['Authorization'] = 'Bearer $token';
       if (leadId != null) request.fields['leadId'] = leadId;
       if (callLogId != null) request.fields['callLogId'] = callLogId;
-
       final file = await http.MultipartFile.fromPath('file', filePath);
       request.files.add(file);
+      final streamed = await _client.send(request).timeout(const Duration(seconds: 30));
+      return http.Response.fromStream(streamed);
+    }
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+    try {
+      var response = await sendMultipart(await _storage.getToken());
+      if (response.statusCode == 401) {
+        final refreshed = await refreshToken();
+        if (refreshed) {
+          response = await sendMultipart(await _storage.getToken());
+        }
+        if (response.statusCode == 401) {
+          await _handleSessionExpired();
+          return null;
+        }
+      }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -303,10 +355,9 @@ class ApiService {
   Future<Map<String, dynamic>?> checkPushToDialJob() async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/telephony/push-to-dial?poll=true');
-    final headers = await _headers();
 
     try {
-      final res = await http.get(url, headers: headers);
+      final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['hasJob'] == true && data['job'] != null) {
@@ -323,13 +374,10 @@ class ApiService {
   Future<bool> updatePushToDialStatus(String jobId, String status) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/telephony/push-to-dial');
-    final headers = await _headers();
 
     try {
-      final res = await http.patch(
-        url,
-        headers: headers,
-        body: jsonEncode({'jobId': jobId, 'status': status}),
+      final res = await _sendWithAuthRetry(
+        (h) => _client.patch(url, headers: h, body: jsonEncode({'jobId': jobId, 'status': status})),
       );
       return res.statusCode == 200;
     } catch (_) {
@@ -353,6 +401,7 @@ class ApiService {
     String? callLogId,
     String? logSource,
     bool isInterested = false,
+    bool historicalSync = false,
   }) async {
     lastError = null;
     if (leadId.trim().isEmpty) {
@@ -362,7 +411,6 @@ class ApiService {
 
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/dispose');
-    final headers = await _headers();
 
     final payload = <String, dynamic>{
       'disposition': disposition,
@@ -377,29 +425,13 @@ class ApiService {
     if (meetingLink != null) payload['meetingLink'] = meetingLink;
     if (callTimestamp != null) payload['callTimestamp'] = callTimestamp;
     if (callLogId != null) payload['callLogId'] = callLogId;
+    if (historicalSync) payload['historicalSync'] = true;
 
     try {
-      var res = await http
-          .patch(
-            url,
-            headers: headers,
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      if (res.statusCode == 401) {
-        final refreshed = await refreshToken();
-        if (refreshed) {
-          final newHeaders = await _headers();
-          res = await http
-              .patch(
-                url,
-                headers: newHeaders,
-                body: jsonEncode(payload),
-              )
-              .timeout(const Duration(seconds: 20));
-        }
-      }
+      final res = await _sendWithAuthRetry(
+        (h) => _client.patch(url, headers: h, body: jsonEncode(payload)),
+        timeout: _disposeTimeout,
+      );
 
       if (res.statusCode == 200) return true;
 
@@ -419,27 +451,55 @@ class ApiService {
     }
   }
 
-  /// Flush All Unsynced Offline Calls When Network Reconnects
+  /// Flush All Unsynced Offline Calls When Network Reconnects (mutex-guarded)
   Future<int> flushOfflineQueue() async {
-    final history = await _storage.getCallHistory();
-    final unsynced = history.where((c) => !c.isSynced).toList();
-    int syncedCount = 0;
+    if (_isFlushingQueue) return 0;
+    _isFlushingQueue = true;
+    try {
+      final history = await _storage.getCallHistory();
+      final unsynced = history.where((c) => !c.isSynced).toList();
+      int syncedCount = 0;
 
-    for (var item in unsynced) {
-      // Hold temporary SIM dialer drafts briefly so an active PostCallDialog can save cleanly first
-      if (item.leadId != null && item.remark == 'Captured from SIM dialer') {
-        try {
-          final ts = DateTime.parse(item.callTimestamp).toUtc();
-          if (DateTime.now().toUtc().difference(ts).inMinutes < 2) {
-            continue;
+      for (var item in unsynced) {
+        // Hold temporary SIM dialer drafts briefly so an active PostCallDialog can save cleanly first
+        if (!item.needsDisposeSync && item.leadId != null && item.remark == 'Captured from SIM dialer') {
+          try {
+            final ts = DateTime.parse(item.callTimestamp).toUtc();
+            if (DateTime.now().toUtc().difference(ts).inMinutes < 2) {
+              continue;
+            }
+          } catch (_) {}
+        }
+
+        bool ok;
+        if (item.needsDisposeSync && item.leadId != null && item.leadId!.isNotEmpty) {
+          ok = await disposeLead(
+            leadId: item.leadId!,
+            disposition: item.disposition,
+            durationSeconds: item.durationSeconds,
+            remark: item.remark,
+            callbackDatetime: item.callbackDatetime,
+            demoDatetime: item.demoDatetime,
+            decisionMakerName: item.decisionMakerName,
+            meetingLink: item.meetingLink,
+            callTimestamp: item.callTimestamp,
+            callLogId: item.id,
+            logSource: item.logSource,
+            isInterested: item.isInterested,
+          );
+          if (ok) {
+            await _storage.updateCallRecordSyncStatus(item.id, true);
           }
-        } catch (_) {}
+        } else {
+          ok = await syncCallLog(item);
+        }
+        if (ok) syncedCount++;
       }
-      final ok = await syncCallLog(item);
-      if (ok) syncedCount++;
-    }
 
-    return syncedCount;
+      return syncedCount;
+    } finally {
+      _isFlushingQueue = false;
+    }
   }
 
   /// Fetch Real-Time Dashboard Statistics
@@ -457,16 +517,8 @@ class ApiService {
       if (userId != null && userId.isNotEmpty) 'userId': userId,
     };
     final url = Uri.parse('$baseUrl/api/dashboard/stats').replace(queryParameters: queryParams);
-    final headers = await _headers();
 
-    var res = await http.get(url, headers: headers);
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        final newHeaders = await _headers();
-        res = await http.get(url, headers: newHeaders);
-      }
-    }
+    final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -498,15 +550,8 @@ class ApiService {
   Future<UserProfile> getDetailedProfile() async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/profile');
-    final headers = await _headers();
 
-    var res = await http.get(url, headers: headers);
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        res = await http.get(url, headers: await _headers());
-      }
-    }
+    final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -531,7 +576,6 @@ class ApiService {
   }) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/profile');
-    final headers = await _headers();
 
     final payload = <String, dynamic>{};
     if (fullName != null) payload['fullName'] = fullName.trim();
@@ -540,21 +584,9 @@ class ApiService {
     if (currentPassword != null) payload['currentPassword'] = currentPassword;
     if (newPassword != null) payload['newPassword'] = newPassword;
 
-    var res = await http.patch(
-      url,
-      headers: headers,
-      body: jsonEncode(payload),
+    final res = await _sendWithAuthRetry(
+      (h) => _client.patch(url, headers: h, body: jsonEncode(payload)),
     );
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        res = await http.patch(
-          url,
-          headers: await _headers(),
-          body: jsonEncode(payload),
-        );
-      }
-    }
 
     return res.statusCode == 200;
   }
@@ -569,11 +601,13 @@ class ApiService {
       payload['notes'] = notes.trim();
     }
 
-    final res = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    );
+    final res = await _client
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(_defaultTimeout);
 
     final data = jsonDecode(res.body);
     if (res.statusCode != 200) {
@@ -587,15 +621,8 @@ class ApiService {
   Future<Map<String, dynamic>> getLeadDetails(String leadId) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId');
-    final headers = await _headers();
 
-    var res = await http.get(url, headers: headers);
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        res = await http.get(url, headers: await _headers());
-      }
-    }
+    final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     }
@@ -611,25 +638,10 @@ class ApiService {
   Future<bool> updateLead(String leadId, Map<String, dynamic> payload) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId');
-    final headers = await _headers();
 
-    var res = await http.patch(
-      url,
-      headers: headers,
-      body: jsonEncode(payload),
+    final res = await _sendWithAuthRetry(
+      (h) => _client.patch(url, headers: h, body: jsonEncode(payload)),
     );
-
-    if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        final newHeaders = await _headers();
-        res = await http.patch(
-          url,
-          headers: newHeaders,
-          body: jsonEncode(payload),
-        );
-      }
-    }
 
     if (res.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
@@ -650,25 +662,11 @@ class ApiService {
   Future<bool> editLeadTimelineLog(String leadId, Map<String, dynamic> payload) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/leads/$leadId/timeline/edit');
-    final headers = await _headers();
 
     try {
-      var res = await http.patch(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
+      final res = await _sendWithAuthRetry(
+        (h) => _client.patch(url, headers: h, body: jsonEncode(payload)),
       );
-
-      if (res.statusCode == 401) {
-        final refreshed = await refreshToken();
-        if (refreshed) {
-          res = await http.patch(
-            url,
-            headers: await _headers(),
-            body: jsonEncode(payload),
-          );
-        }
-      }
 
       if (res.statusCode != 200) {
         try {
@@ -688,18 +686,9 @@ class ApiService {
   Future<Map<String, dynamic>> getAgendaTasks() async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/tasks');
-    final headers = await _headers();
 
-    final res = await http.get(url, headers: headers);
+    final res = await _sendWithAuthRetry((h) => _client.get(url, headers: h));
     if (res.statusCode == 401) {
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        final retryHeaders = await _headers();
-        final retryRes = await http.get(url, headers: retryHeaders);
-        if (retryRes.statusCode == 200) {
-          return jsonDecode(retryRes.body) as Map<String, dynamic>;
-        }
-      }
       throw Exception('Session expired. Please log in again.');
     }
     if (res.statusCode != 200) {
@@ -713,26 +702,11 @@ class ApiService {
   Future<bool> updateAgendaTask(String taskId, Map<String, dynamic> payload) async {
     final baseUrl = await _storage.getBaseUrl();
     final url = Uri.parse('$baseUrl/api/tasks/$taskId');
-    final headers = await _headers();
 
     try {
-      var res = await http.patch(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
+      final res = await _sendWithAuthRetry(
+        (h) => _client.patch(url, headers: h, body: jsonEncode(payload)),
       );
-
-      if (res.statusCode == 401) {
-        final refreshed = await refreshToken();
-        if (refreshed) {
-          final retryHeaders = await _headers();
-          res = await http.patch(
-            url,
-            headers: retryHeaders,
-            body: jsonEncode(payload),
-          );
-        }
-      }
 
       return res.statusCode == 200;
     } catch (_) {

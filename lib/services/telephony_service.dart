@@ -67,6 +67,7 @@ class TelephonyService {
   // Push-to-dial listener state
   Timer? _pushToDialTimer;
   bool isPushToDialActive = false;
+  bool _isPollingPush = false;
 
   /// Start background listener for Web CRM Push-to-Dial requests
   void startPushToDialListener({Function(Map<String, dynamic>)? onCallTriggered}) {
@@ -75,6 +76,8 @@ class TelephonyService {
 
     _pushToDialTimer?.cancel();
     _pushToDialTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (_isPollingPush || !isPushToDialActive) return;
+      _isPollingPush = true;
       try {
         final job = await _api.checkPushToDialJob();
         if (job != null && job['id'] != null) {
@@ -93,13 +96,17 @@ class TelephonyService {
             onCallTriggered?.call(job);
           }
         }
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        _isPollingPush = false;
+      }
     });
   }
 
   /// Stop listening for Web CRM Push-to-Dial requests
   void stopPushToDialListener() {
     isPushToDialActive = false;
+    _isPollingPush = false;
     _pushToDialTimer?.cancel();
     _pushToDialTimer = null;
   }
@@ -158,16 +165,17 @@ class TelephonyService {
     String? repPhone,
     String? contactName,
   }) {
-    final name = (repName != null && repName.trim().isNotEmpty) ? repName.trim() : 'Aaditya';
-    final email = (repEmail != null && repEmail.trim().isNotEmpty) ? repEmail.trim() : 'aaditya@textorasms.com';
-    var phone = (repPhone != null && repPhone.trim().isNotEmpty) ? repPhone.trim() : '9902101007';
+    final name = (repName != null && repName.trim().isNotEmpty) ? repName.trim() : 'Sales Team';
+    final email = (repEmail != null && repEmail.trim().isNotEmpty) ? repEmail.trim() : '';
+    var phone = (repPhone != null && repPhone.trim().isNotEmpty) ? repPhone.trim() : '';
     phone = phone.replaceAll(RegExp(r'\D'), '');
     if (phone.length > 10) phone = phone.substring(phone.length - 10);
-    if (phone.isEmpty) phone = '9902101007';
 
     final greetingTarget = (contactName != null && contactName.trim().isNotEmpty)
         ? contactName.trim()
         : 'Sir';
+    final emailLine = email.isNotEmpty ? '📧 $email\n' : '';
+    final phoneLine = phone.isNotEmpty ? '📱 $phone\n\n' : '\n';
 
     return 'Hello $greetingTarget 👋\n'
         'This is $name from Textora Technologies Pvt Ltd.\n\n'
@@ -184,9 +192,9 @@ class TelephonyService {
         '📢 Reach customers instantly | Improve response rate | Increase conversions\n\n'
         '📞 For details & free demo:\n'
         '$name\n'
-        '📧 $email\n'
+        '$emailLine'
         'https://textorasms.com\n'
-        '📱 $phone\n\n'
+        '$phoneLine'
         'Reply YES to get started 👍';
   }
 
@@ -314,8 +322,14 @@ class TelephonyService {
   DateTime? _lastServerCallsTime;
 
   void clearCaches() {
+    _cachedLeadBySuffix = {};
+    _cachedLeadById = {};
     _lastLeadCacheTime = null;
+    _cachedServerCalls = [];
     _lastServerCallsTime = null;
+    activeDialedNumber = null;
+    activeLeadId = null;
+    callInitiatedTime = null;
   }
 
   Future<void> _ensureLeadCache({bool force = false}) async {
@@ -351,15 +365,16 @@ class TelephonyService {
     }
   }
 
-  Future<void> _ensureServerCallCache({bool force = false}) async {
+  Future<void> _ensureServerCallCache({bool force = false, int limit = 150}) async {
     final now = DateTime.now();
     if (!force &&
+        _cachedServerCalls.length >= (limit > 150 ? limit : 0) &&
         _lastServerCallsTime != null &&
         now.difference(_lastServerCallsTime!).inSeconds < 20) {
       return;
     }
     try {
-      final calls = await _api.getCallLogs(limit: 150).timeout(const Duration(seconds: 10));
+      final calls = await _api.getCallLogs(limit: limit).timeout(const Duration(seconds: 12));
       _cachedServerCalls = calls;
       _lastServerCallsTime = now;
     } catch (_) {}
@@ -377,7 +392,8 @@ class TelephonyService {
       callEpoch = DateTime.parse(call.callTimestamp).toUtc().millisecondsSinceEpoch;
     } catch (_) {}
     if (callEpoch == 0) callEpoch = DateTime.now().toUtc().millisecondsSinceEpoch;
-    return _isAlreadyLoggedOnServer(
+    return _isCallInServerList(
+      _cachedServerCalls,
       lead,
       callEpoch,
       call.durationSeconds,
@@ -385,16 +401,20 @@ class TelephonyService {
     );
   }
 
-  bool _isAlreadyLoggedOnServer(
+  bool _isCallInServerList(
+    List<CallSyncItem> serverList,
     LeadItem lead,
     int timestampEpoch,
     int duration, {
     required bool isInbound,
   }) {
     final leadSuffix = last10Digits(lead.phoneNumber);
-    for (final sc in _cachedServerCalls) {
+    final secSuffix = last10Digits(lead.secondaryPhone ?? '');
+    for (final sc in serverList) {
+      final scSuffix = last10Digits(sc.phoneNumber);
       final matchesLead = (sc.leadId != null && sc.leadId == lead.id) ||
-          (leadSuffix.isNotEmpty && last10Digits(sc.phoneNumber) == leadSuffix);
+          (leadSuffix.isNotEmpty && scSuffix == leadSuffix) ||
+          (secSuffix.isNotEmpty && scSuffix == secSuffix);
       if (!matchesLead) continue;
 
       final scIsInbound =
@@ -419,6 +439,21 @@ class TelephonyService {
       }
     }
     return false;
+  }
+
+  bool _isAlreadyLoggedOnServer(
+    LeadItem lead,
+    int timestampEpoch,
+    int duration, {
+    required bool isInbound,
+  }) {
+    return _isCallInServerList(
+      _cachedServerCalls,
+      lead,
+      timestampEpoch,
+      duration,
+      isInbound: isInbound,
+    );
   }
 
   /// Resolve a CRM LeadItem by ID or phone number for foreground active call handling
@@ -556,15 +591,232 @@ class TelephonyService {
             'isMissed': isMissedCall,
             'isInbound': isInboundOrMissed,
           });
-        } else {
-          // Non-CRM personal number: mark processed so future scans stay instant
-          await _storage.markCallSignatureProcessed(signature);
         }
+        // NOTE: Do NOT mark non-CRM numbers as processed so when an existing customer
+        // is later added to CRM, their earlier calls can still be discovered and logged.
       }
     } catch (_) {}
 
     // Process oldest-first so dispositions happen in chronological order
     return pendingQueue.reversed.toList();
+  }
+
+  /// Inspect Android CallLog specifically for a CRM lead (primary + alternate phone),
+  /// cross-checked against all server call logs for that lead (regardless of age or global cache).
+  Future<List<Map<String, dynamic>>> scanPhoneCallsForLead(
+    LeadItem lead, {
+    int lookbackDays = 7,
+  }) async {
+    final hasPerms = await checkAndRequestPermissions();
+    if (!hasPerms) return [];
+
+    final primarySuffix = last10Digits(lead.phoneNumber);
+    final secondarySuffix = last10Digits(lead.secondaryPhone ?? '');
+    final targetSuffixes = <String>{
+      if (primarySuffix.isNotEmpty) primarySuffix,
+      if (secondarySuffix.isNotEmpty) secondarySuffix,
+    };
+    if (targetSuffixes.isEmpty) return [];
+
+    // Fetch complete callLogs directly for this lead from server
+    List<CallSyncItem> leadServerCalls = [];
+    try {
+      final details = await _api.getLeadDetails(lead.id).timeout(const Duration(seconds: 12));
+      final rawLogs = details['callLogs'] as List? ?? [];
+      leadServerCalls = rawLogs.map((j) {
+        final m = Map<String, dynamic>.from(j as Map);
+        m['phoneNumber'] ??= lead.phoneNumber;
+        m['leadId'] ??= lead.id;
+        return CallSyncItem.fromJson(m);
+      }).toList();
+    } catch (_) {
+      await _ensureServerCallCache(force: true, limit: 300);
+      leadServerCalls = _cachedServerCalls;
+    }
+
+    final results = <Map<String, dynamic>>[];
+    try {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final daysToQuery = lookbackDays > 0 ? lookbackDays : 90;
+      final lookbackEpoch =
+          DateTime.now().subtract(Duration(days: daysToQuery)).millisecondsSinceEpoch;
+
+      final entries = await CallLog.query(dateFrom: lookbackEpoch);
+      final seenSignatures = <String>{};
+
+      for (final entry in entries) {
+        final callType = entry.callType;
+        final isIncoming = callType == CallType.incoming ||
+            callType == CallType.wifiIncoming ||
+            callType == CallType.answeredExternally;
+        final isMissed = callType == CallType.missed || callType == CallType.rejected;
+        final isOutgoing = callType == CallType.outgoing || callType == CallType.wifiOutgoing;
+        if (!isIncoming && !isMissed && !isOutgoing) continue;
+
+        final timestampEpoch = entry.timestamp;
+        if (timestampEpoch == null || timestampEpoch < lookbackEpoch || timestampEpoch > nowMs + 60000) {
+          continue;
+        }
+
+        final rawNumber = entry.number ?? '';
+        final suffix = last10Digits(rawNumber);
+        if (!targetSuffixes.contains(suffix)) continue;
+
+        final duration = (!isMissed && entry.duration != null && entry.duration! > 0)
+            ? entry.duration!
+            : 0;
+        final isInboundOrMissed = isIncoming || isMissed;
+        final signature = buildCallSignature(
+          phoneNumber: suffix,
+          timestampEpoch: timestampEpoch,
+          durationSeconds: duration,
+          isInbound: isInboundOrMissed,
+        );
+        if (seenSignatures.contains(signature)) continue;
+        seenSignatures.add(signature);
+
+        final isLogged = _isCallInServerList(
+          leadServerCalls,
+          lead,
+          timestampEpoch,
+          duration,
+          isInbound: isInboundOrMissed,
+        );
+
+        final timestampIso =
+            DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
+        final isMissedCall = isInboundOrMissed && (isMissed || duration == 0);
+
+        final callItem = CallSyncItem(
+          id: '${isInboundOrMissed ? "inbound" : "outbound"}_${timestampEpoch}_$suffix',
+          leadId: lead.id,
+          phoneNumber: rawNumber.isNotEmpty ? rawNumber : lead.phoneNumber,
+          durationSeconds: duration,
+          disposition: isInboundOrMissed
+              ? (isMissedCall ? 'RNR' : 'Connected')
+              : (duration > 0 ? 'Connected' : 'RNR'),
+          callTimestamp: timestampIso,
+          remark: isInboundOrMissed
+              ? (isMissedCall ? 'Missed inbound call from customer' : 'Inbound call from customer')
+              : 'Synced from Phone Dialer',
+          logSource: isInboundOrMissed
+              ? (isMissedCall ? 'inbound_missed' : 'inbound_sim')
+              : 'apk_manual',
+          isSynced: isLogged,
+        );
+
+        results.add({
+          'lead': lead,
+          'call': callItem,
+          'signature': signature,
+          'isInbound': isInboundOrMissed,
+          'isMissed': isMissedCall,
+          'isLogged': isLogged,
+          'timestampEpoch': timestampEpoch,
+        });
+      }
+    } catch (_) {}
+
+    // Newest first for UI display
+    results.sort((a, b) => (b['timestampEpoch'] as int).compareTo(a['timestampEpoch'] as int));
+    return results;
+  }
+
+  /// Scan phone call logs across ALL CRM leads (e.g. last 7 days) and return unlogged calls (oldest-first).
+  Future<List<Map<String, dynamic>>> scanAllCrmPhoneCalls({
+    int lookbackDays = 7,
+  }) async {
+    final hasPerms = await checkAndRequestPermissions();
+    if (!hasPerms) return [];
+
+    await _ensureLeadCache(force: true);
+    if (_cachedLeadBySuffix.isEmpty) return [];
+    await _ensureServerCallCache(force: true, limit: 500);
+
+    final pending = <Map<String, dynamic>>[];
+    try {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final daysToQuery = lookbackDays > 0 ? lookbackDays : 30;
+      final lookbackEpoch =
+          DateTime.now().subtract(Duration(days: daysToQuery)).millisecondsSinceEpoch;
+      final entries = await CallLog.query(dateFrom: lookbackEpoch);
+      final seenSignatures = <String>{};
+
+      for (final entry in entries) {
+        final callType = entry.callType;
+        final isIncoming = callType == CallType.incoming ||
+            callType == CallType.wifiIncoming ||
+            callType == CallType.answeredExternally;
+        final isMissed = callType == CallType.missed || callType == CallType.rejected;
+        final isOutgoing = callType == CallType.outgoing || callType == CallType.wifiOutgoing;
+        if (!isIncoming && !isMissed && !isOutgoing) continue;
+
+        final timestampEpoch = entry.timestamp;
+        if (timestampEpoch == null || timestampEpoch < lookbackEpoch || timestampEpoch > nowMs + 60000) {
+          continue;
+        }
+
+        final rawNumber = entry.number ?? '';
+        final suffix = last10Digits(rawNumber);
+        final matchedLead = _cachedLeadBySuffix[suffix];
+        if (matchedLead == null) continue;
+
+        final duration = (!isMissed && entry.duration != null && entry.duration! > 0)
+            ? entry.duration!
+            : 0;
+        final isInboundOrMissed = isIncoming || isMissed;
+        final signature = buildCallSignature(
+          phoneNumber: suffix,
+          timestampEpoch: timestampEpoch,
+          durationSeconds: duration,
+          isInbound: isInboundOrMissed,
+        );
+        if (seenSignatures.contains(signature)) continue;
+        seenSignatures.add(signature);
+
+        if (_isCallInServerList(
+          _cachedServerCalls,
+          matchedLead,
+          timestampEpoch,
+          duration,
+          isInbound: isInboundOrMissed,
+        )) {
+          continue;
+        }
+
+        final timestampIso =
+            DateTime.fromMillisecondsSinceEpoch(timestampEpoch, isUtc: true).toIso8601String();
+        final isMissedCall = isInboundOrMissed && (isMissed || duration == 0);
+
+        pending.add({
+          'lead': matchedLead,
+          'call': CallSyncItem(
+            id: '${isInboundOrMissed ? "inbound" : "outbound"}_${timestampEpoch}_$suffix',
+            leadId: matchedLead.id,
+            phoneNumber: rawNumber.isNotEmpty ? rawNumber : matchedLead.phoneNumber,
+            durationSeconds: duration,
+            disposition: isInboundOrMissed
+                ? (isMissedCall ? 'RNR' : 'Connected')
+                : (duration > 0 ? 'Connected' : 'RNR'),
+            callTimestamp: timestampIso,
+            remark: isInboundOrMissed
+                ? (isMissedCall ? 'Missed inbound call from customer' : 'Inbound call from customer')
+                : 'Synced from Phone Dialer',
+            logSource: isInboundOrMissed
+                ? (isMissedCall ? 'inbound_missed' : 'inbound_sim')
+                : 'apk_manual',
+            isSynced: false,
+          ),
+          'signature': signature,
+          'isInbound': isInboundOrMissed,
+          'isMissed': isMissedCall,
+          'timestampEpoch': timestampEpoch,
+        });
+      }
+    } catch (_) {}
+
+    pending.sort((a, b) => (a['timestampEpoch'] as int).compareTo(b['timestampEpoch'] as int));
+    return pending;
   }
 
   /// Inspect Android CallLog for the next un-synced call from active CRM leads
@@ -575,6 +827,8 @@ class TelephonyService {
 
   /// Locate the newest call recording file on the Android filesystem
   Future<File?> findLatestRecordingFile() async {
+    if (!Platform.isAndroid) return null;
+    const int maxRecordingBytes = 15 * 1024 * 1024;
     try {
       final candidateDirs = [
         Directory('/storage/emulated/0/Recordings/Call'),
@@ -599,8 +853,10 @@ class TelephonyService {
               final lower = entity.path.toLowerCase();
               if (validExtensions.any((ext) => lower.endsWith(ext))) {
                 final stat = entity.statSync();
-                // Filter files created or updated in last 20 minutes
-                if (now.difference(stat.modified).inMinutes < 20) {
+                // Filter files created or updated in last 10 minutes and under 15 MB
+                if (stat.size > 0 &&
+                    stat.size <= maxRecordingBytes &&
+                    now.difference(stat.modified).inMinutes < 10) {
                   if (newestTime == null || stat.modified.isAfter(newestTime)) {
                     newestTime = stat.modified;
                     newestFile = entity;

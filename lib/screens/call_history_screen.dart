@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/telephony_service.dart';
 import 'lead_profile_dialog.dart';
+import 'phone_log_sync_sheet.dart';
 
 class CallHistoryScreen extends StatefulWidget {
   final UserProfile? user;
@@ -599,6 +600,18 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: titleColor),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.manage_search_rounded, color: Color(0xFF10B981)),
+            tooltip: 'Scan Phone Dialer Logs (7 Days)',
+            onPressed: () {
+              PhoneLogSyncSheet.show(
+                context,
+                onSynced: () {
+                  if (mounted) _loadHistory();
+                },
+              );
+            },
+          ),
           if (pendingCount > 0)
             TextButton.icon(
               onPressed: _isSyncing ? null : _syncPending,

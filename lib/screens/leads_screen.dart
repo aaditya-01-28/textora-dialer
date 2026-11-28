@@ -58,7 +58,10 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
 
   bool _isLeadMatchingFilter(LeadItem l, String filterId) {
     if (filterId == 'all') return true;
-    final s = l.status.toLowerCase().trim();
+    final rawStatus = l.status.toLowerCase().trim();
+    final s = ((rawStatus == 'new' || rawStatus == 'uncontacted') && l.rnrCount > 0)
+        ? 'rnr'
+        : rawStatus;
     switch (filterId) {
       case 'new':
         return s == 'new' || s == 'uncontacted';
@@ -739,7 +742,9 @@ class _LeadsScreenState extends State<LeadsScreen> with WidgetsBindingObserver {
                   const SizedBox(width: 8),
                   Row(
                     children: [
-                      if (lead.status.toLowerCase() == 'rnr')
+                      if (lead.status.toLowerCase() == 'rnr' ||
+                          ((lead.status.toLowerCase() == 'new' || lead.status.toLowerCase() == 'uncontacted') &&
+                              lead.rnrCount > 0))
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(

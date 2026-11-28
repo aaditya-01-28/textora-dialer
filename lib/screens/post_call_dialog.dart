@@ -13,6 +13,7 @@ class PostCallDialog extends StatefulWidget {
   final VoidCallback? onDismissed;
   final bool isInbound;
   final bool isAutoDetectedOutbound;
+  final bool historicalSync;
   final String? queueLabel;
 
   const PostCallDialog({
@@ -23,6 +24,7 @@ class PostCallDialog extends StatefulWidget {
     this.onDismissed,
     this.isInbound = false,
     this.isAutoDetectedOutbound = false,
+    this.historicalSync = false,
     this.queueLabel,
   });
 
@@ -218,6 +220,7 @@ class _PostCallDialogState extends State<PostCallDialog> {
           ? (widget.call.durationSeconds == 0 ? 'inbound_missed' : 'inbound_sim')
           : 'apk_manual',
       isInterested: _isInterested || _disposition == 'Interested',
+      historicalSync: widget.historicalSync,
     );
 
     if (!mounted) return;
@@ -237,9 +240,52 @@ class _PostCallDialogState extends State<PostCallDialog> {
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } else {
+      final errMsg = api.lastError ?? '';
+      final isNetworkFailure =
+          errMsg.startsWith('Network error') || errMsg.contains('timed out');
+      if (isNetworkFailure) {
+        await StorageService().saveCallRecord(CallSyncItem(
+          id: widget.call.id,
+          leadId: widget.lead.id,
+          phoneNumber: widget.call.phoneNumber,
+          durationSeconds: widget.call.durationSeconds,
+          disposition: finalDisposition,
+          callTimestamp: widget.call.callTimestamp,
+          remark: remark,
+          recordingUrl: widget.call.recordingUrl,
+          logSource: widget.isInbound
+              ? (widget.call.durationSeconds == 0 ? 'inbound_missed' : 'inbound_sim')
+              : 'apk_manual',
+          leadContactName: widget.lead.contactName,
+          leadCompanyName: widget.lead.companyName,
+          leadStatus: widget.lead.status,
+          isInterested: _isInterested || _disposition == 'Interested',
+          needsDisposeSync: true,
+          callbackDatetime: callbackDatetimeIso,
+          demoDatetime: demoDatetimeIso,
+          decisionMakerName: decisionMakerName,
+          meetingLink: meetingLink,
+          isSynced: false,
+        ));
+        if (!mounted) return;
+        _didSave = true;
+        TelephonyService().clearCaches();
+        TelephonyService().notifyCallCompleted();
+        widget.onSaved();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Offline: Call outcome queued locally and will sync automatically.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
       setState(() {
         _isSaving = false;
-        _errorMessage = api.lastError ?? 'Failed to save disposition. Please check your network connection.';
+        _errorMessage = errMsg.isNotEmpty
+            ? errMsg
+            : 'Failed to save disposition. Please check your network connection.';
       });
     }
   }
